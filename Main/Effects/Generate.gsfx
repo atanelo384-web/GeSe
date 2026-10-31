@@ -1,0 +1,327 @@
+// GeSe built-in effects: Generate (Intensity blends the generated image over the layer)
+
+@effect Fill
+@id gese.gen.fill
+@category Generate
+@desc Fills the layer with a color, keeping its transparency.
+@param color fillColor "Color" 1 0.533 0.004 1
+@param bool invertA "Invert Alpha" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = invertA ? 1.0 - c.a : c.a;
+    return float4(fillColor.rgb, a * fillColor.a);
+}
+@end
+
+@effect Gradient Ramp
+@id gese.gen.ramp
+@category Generate
+@param point startPt "Start of Ramp" 0.5 0
+@param color startColor "Start Color" 0 0 0 1
+@param point endPt "End of Ramp" 0.5 1
+@param color endColor "End Color" 1 1 1 1
+@param choice shape "Ramp Shape" 0 "Linear Ramp|Radial Ramp"
+@code
+float4 effect(float2 uv) {
+    float2 a = startPt * RES, b = endPt * RES, p = uv * RES;
+    float t;
+    if (shape == 0) { float2 ab = b - a; t = saturate(dot(p - a, ab) / max(dot(ab, ab), 1e-3)); }
+    else t = saturate(length(p - a) / max(length(b - a), 1e-3));
+    return lerp(startColor, endColor, t);
+}
+@end
+
+@effect 4-Color Gradient
+@id gese.gen.4color
+@category Generate
+@param point p1 "Point 1" 0.1 0.1
+@param color c1 "Color 1" 1 0.533 0.004 1
+@param point p2 "Point 2" 0.9 0.1
+@param color c2 "Color 2" 0.153 0.071 0 1
+@param point p3 "Point 3" 0.1 0.9
+@param color c3 "Color 3" 0.2 0.2 0.2 1
+@param point p4 "Point 4" 0.9 0.9
+@param color c4 "Color 4" 1 0.9 0.7 1
+@param float blendV "Blend" 2 0.5 8
+@code
+float4 effect(float2 uv) {
+    float2 asp = float2(ASPECT, 1.0);
+    float w1 = pow(1.0 / max(length((uv - p1) * asp), 1e-3), blendV), w2 = pow(1.0 / max(length((uv - p2) * asp), 1e-3), blendV);
+    float w3 = pow(1.0 / max(length((uv - p3) * asp), 1e-3), blendV), w4 = pow(1.0 / max(length((uv - p4) * asp), 1e-3), blendV);
+    return (c1 * w1 + c2 * w2 + c3 * w3 + c4 * w4) / (w1 + w2 + w3 + w4);
+}
+@end
+
+@effect Checkerboard
+@id gese.gen.checker
+@category Generate
+@param point anchorPt "Anchor" 0 0
+@param float cw "Width" 64 1 2000 px
+@param float chh "Height" 64 1 2000 px
+@param color color1 "Color" 1 1 1 1
+@param color color2 "Color 2" 0 0 0 0
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - anchorPt) * RES / float2(max(PX(cw), 1.0), max(PX(chh), 1.0));
+    float k = fmod(floor(p.x) + floor(p.y), 2.0);
+    k = abs(k);
+    float4 c = k < 0.5 ? color1 : color2;
+    float4 s = SRC(uv);
+    float a = c.a + s.a * (1.0 - c.a);
+    return float4((c.rgb * c.a + s.rgb * s.a * (1.0 - c.a)) / max(a, 1e-4), a);
+}
+@end
+
+@effect Grid
+@id gese.gen.grid
+@category Generate
+@param point anchorPt "Anchor" 0.5 0.5
+@param float size "Size" 80 2 2000 px
+@param float border "Border" 2 0.5 100 px
+@param color gridColor "Color" 1 1 1 1
+@param bool invertG "Invert Grid" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 p = (uv - anchorPt) * RES;
+    float s = max(PX(size), 2.0), b = max(PX(border), 0.5);
+    float2 f = abs(frac(p / s + 0.5) - 0.5) * s;
+    float g = 1.0 - smoothstep(b * 0.5 - 0.5, b * 0.5 + 0.5, min(f.x, f.y));
+    if (invertG) g = 1.0 - g;
+    c.rgb = lerp(c.rgb, gridColor.rgb, g * gridColor.a);
+    c.a = max(c.a, g * gridColor.a);
+    return c;
+}
+@end
+
+@effect Circle
+@id gese.gen.circle
+@category Generate
+@param point center "Center" 0.5 0.5
+@param float radius "Radius" 200 0 5000 px
+@param float feather "Feather" 2 0 1000 px
+@param float ringWidth "Edge (0 = filled)" 0 0 2000 px
+@param color circleColor "Color" 1 0.533 0.004 1
+@param bool invertC "Invert Circle" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float d = length((uv - center) * RES);
+    float r = PX(radius), f = max(PX(feather), 0.5);
+    float m = 1.0 - smoothstep(r - f, r + f, d);
+    if (ringWidth > 0.0) m *= smoothstep(r - PX(ringWidth) - f, r - PX(ringWidth) + f, d);
+    if (invertC) m = 1.0 - m;
+    m *= circleColor.a;
+    float a = m + c.a * (1.0 - m);
+    return float4((circleColor.rgb * m + c.rgb * c.a * (1.0 - m)) / max(a, 1e-4), a);
+}
+@end
+
+@effect Stripes
+@id gese.gen.stripes
+@category Generate
+@speed
+@param float width "Width" 40 1 2000 px
+@param angle stripeAngle "Angle" 45
+@param color stripeColor "Color" 1 0.533 0.004 1
+@param float softness "Softness" 5 0 100 %
+@param float scroll "Scroll Speed" 0 -2000 2000 px/s
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = radians(stripeAngle);
+    float x = dot(uv * RES, float2(cos(a), sin(a))) + PX(scroll) * PHASE;
+    float s = frac(x / max(PX(width) * 2.0, 1.0));
+    float sf = softness / 200.0 + 0.002;
+    float m = smoothstep(0.5 - sf, 0.5 + sf, s) * (1.0 - smoothstep(1.0 - sf, 1.0, s)) * stripeColor.a;
+    c.rgb = lerp(c.rgb, stripeColor.rgb, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end
+
+@effect Cell Pattern
+@id gese.gen.cells
+@category Generate
+@speed
+@param float size "Size" 80 4 2000 px
+@param float contrastV "Contrast" 100 0 400 %
+@param choice cellType "Type" 0 "Bubbles|Crystals|Plates"
+@param float evoSpeed "Evolution Speed" 0.5 0 10
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(size), 1.0);
+    float2 ip = floor(p), fp = frac(p);
+    float d1 = 9.0, d2 = 9.0, id = 0;
+    [unroll] for (int y = -1; y <= 1; y++) [unroll] for (int x = -1; x <= 1; x++) {
+        float2 g = float2(x, y);
+        float2 o = hash22(ip + g);
+        o = 0.5 + 0.5 * sin(PHASE * evoSpeed + TAU * o);
+        float d = length(g + o - fp);
+        if (d < d1) { d2 = d1; d1 = d; id = hash12(ip + g); } else if (d < d2) d2 = d;
+    }
+    float v = cellType == 0 ? d1 : cellType == 1 ? d2 - d1 : id;
+    v = saturate((v - 0.5) * contrastV / 100.0 + 0.5);
+    return float4(v, v, v, 1);
+}
+@end
+
+@effect Radio Waves
+@id gese.gen.radio
+@category Generate
+@speed
+@param point center "Producer Point" 0.5 0.5
+@param float freq "Frequency" 2 0.1 20 waves/s
+@param float expansion "Expansion Speed" 300 1 5000 px/s
+@param float ringWidth "Stroke Width" 6 0.5 200 px
+@param color ringColor "Color" 1 0.533 0.004 1
+@param float fade "Fade Out" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float d = length((uv - center) * RES);
+    float ex = max(PX(expansion), 1.0), fq = max(freq, 0.01);
+    float ph = (PHASE - d / ex) * fq;
+    float f = frac(ph);
+    float dist = min(f, 1.0 - f) / fq * ex;
+    float m = 1.0 - smoothstep(PX(ringWidth) * 0.5, PX(ringWidth) * 0.5 + 1.0, dist);
+    m *= ph >= 0.0 ? 1.0 : 0.0;
+    m *= 1.0 - saturate(d / length(RES)) * fade / 100.0;
+    m *= ringColor.a;
+    c.rgb = lerp(c.rgb, ringColor.rgb, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end
+
+@effect Stroke Border
+@id gese.gen.border
+@category Generate
+@desc Frame around the layer edges.
+@param float width "Border Width" 20 0 1000 px
+@param color borderColor "Color" 1 0.533 0.004 1
+@param float radius "Corner Radius" 0 0 1000 px
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 p = abs(uv - 0.5) * RES;
+    float2 hs = RES * 0.5;
+    float r = PX(radius);
+    float2 q = p - hs + r;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    float m = smoothstep(-PX(width) - 0.5, -PX(width) + 0.5, d) * borderColor.a;
+    c.rgb = lerp(c.rgb, borderColor.rgb, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end
+
+@effect Snow
+@id gese.gen.snow
+@category Generate
+@desc Falling particles (snow, dust, ash).
+@speed
+@param float density "Density" 50 0 100 %
+@param float flakeSize "Size" 3 0.5 30 px
+@param float fallSpeed "Fall Speed" 120 0 2000 px/s
+@param float wind "Wind" 20 -500 500 px/s
+@param color flakeColor "Color" 1 1 1 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float m = 0;
+    [unroll] for (int layer = 0; layer < 3; layer++) {
+        float sc = 1.0 + layer * 0.6;
+        float cell = max(PX(40.0) / sc, 4.0);
+        float2 p = uv * RES + float2(-wind, -fallSpeed) * PX(1.0) * PHASE / sc + layer * 137.0;
+        float2 ip = floor(p / cell), fp = frac(p / cell);
+        float2 o = hash22(ip + layer * 7.0);
+        float on = step(1.0 - density / 100.0, hash12(ip * 1.7 + layer));
+        float d = length((fp - o) * cell);
+        m += on * (1.0 - smoothstep(PX(flakeSize) / sc * 0.5, PX(flakeSize) / sc, d)) * (1.0 - layer * 0.25);
+    }
+    m = saturate(m) * flakeColor.a;
+    c.rgb = lerp(c.rgb, flakeColor.rgb, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end
+
+@effect Plasma
+@id gese.gen.plasma
+@category Generate
+@speed
+@param float pScale "Scale" 300 10 5000 px
+@param choice palette "Palette" 0 "GeSe Orange|Rainbow|Ice|Fire|Mono"
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(pScale), 1.0);
+    float t = PHASE;
+    float v = sin(p.x + t) + sin(p.y * 1.3 + t * 1.2) + sin((p.x + p.y) * 0.7 + t * 0.8) + sin(length(p - 2.0) * 1.5 - t);
+    v = v * 0.125 + 0.5;
+    float3 col;
+    if (palette == 0) col = lerp(float3(0.153, 0.071, 0.0), float3(1.0, 0.533, 0.004), smoothstep(0.2, 0.8, v));
+    else if (palette == 1) col = hsv2rgb(float3(v, 0.85, 1.0));
+    else if (palette == 2) col = lerp(float3(0.0, 0.05, 0.2), float3(0.7, 0.95, 1.0), v);
+    else if (palette == 3) col = float3(saturate(v * 2.0), saturate(v * 2.0 - 0.6), saturate(v * 3.0 - 2.4));
+    else col = v.xxx;
+    return float4(col, 1);
+}
+@end
+
+@effect Beam
+@id gese.gen.beam
+@category Generate
+@param point startPt "Starting Point" 0.2 0.5
+@param point endPt "Ending Point" 0.8 0.5
+@param float thickness "Thickness" 8 0.5 500 px
+@param float softness "Softness" 50 0 100 %
+@param color coreColor "Inside Color" 1 1 1 1
+@param color glowColor "Outside Color" 1 0.533 0.004 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 a = startPt * RES, b = endPt * RES, p = uv * RES;
+    float2 ab = b - a;
+    float t = saturate(dot(p - a, ab) / max(dot(ab, ab), 1e-3));
+    float d = length(p - (a + ab * t));
+    float th = PX(thickness);
+    float core = 1.0 - smoothstep(th * 0.2, th * 0.5, d);
+    float glow = exp(-d * d / (th * th * (0.2 + softness / 50.0)));
+    float3 col = lerp(glowColor.rgb, coreColor.rgb, core);
+    float m = saturate(max(core, glow));
+    c.rgb = lerp(c.rgb, col, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end
+
+@effect Starfield
+@id gese.gen.starfield
+@category Generate
+@desc Hyperspace stars flying towards the camera.
+@speed
+@param float density "Density" 50 0 100 %
+@param float warp "Warp Speed" 1 0 10
+@param color starColor "Color" 1 1 1 1
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - 0.5) * float2(ASPECT, 1.0);
+    float a = atan2(p.y, p.x), r = length(p);
+    float m = 0;
+    [unroll] for (int i = 0; i < 3; i++) {
+        float seg = floor((a / TAU + 0.5) * 300.0 * (1.0 + i));
+        float h = hash11(seg + i * 31.0);
+        float z = frac(h * 7.0 + PHASE * warp * 0.3 * (0.6 + h));
+        float rr = z * z * 1.2;
+        float len = 0.02 + warp * 0.03 * z;
+        m += step(1.0 - density / 100.0, hash11(seg * 1.7 + i)) * smoothstep(rr - len, rr, r) * (1.0 - smoothstep(rr, rr + 0.003, r)) * z;
+    }
+    float4 c = SRC(uv);
+    m = saturate(m * 2.0) * starColor.a;
+    c.rgb = lerp(c.rgb, starColor.rgb, m);
+    c.a = max(c.a, m);
+    return c;
+}
+@end

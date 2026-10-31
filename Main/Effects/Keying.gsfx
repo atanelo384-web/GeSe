@@ -1,0 +1,173 @@
+// GeSe built-in effects: Keying
+
+@effect Chroma Key
+@id gese.key.chroma
+@category Keying
+@desc Removes a color (green / blue screen) with spill suppression.
+@param color keyColor "Key Color" 0.1 0.75 0.2 1
+@param float tolerance "Tolerance" 25 0 100 %
+@param float softness "Edge Softness" 10 0 100 %
+@param float spill "Spill Suppression" 60 0 100 %
+@param float choke "Matte Choke" 0 -50 50 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 k = keyColor.rgb;
+    float2 cbcr = float2(dot(c.rgb, float3(-0.169, -0.331, 0.5)), dot(c.rgb, float3(0.5, -0.419, -0.081)));
+    float2 kc = float2(dot(k, float3(-0.169, -0.331, 0.5)), dot(k, float3(0.5, -0.419, -0.081)));
+    float d = length(cbcr - kc) * 2.0;
+    float t = tolerance / 100.0 * 0.5, s = softness / 100.0 * 0.5 + 1e-3;
+    float a = smoothstep(t, t + s, d + choke / 200.0);
+    float3 hk = rgb2hsv(k);
+    int dom = hk.x > 0.2 && hk.x < 0.45 ? 1 : (hk.x > 0.5 && hk.x < 0.75 ? 2 : 0);
+    float3 o = c.rgb;
+    if (dom == 1) o.g = lerp(o.g, min(o.g, (o.r + o.b) * 0.5), spill / 100.0);
+    else if (dom == 2) o.b = lerp(o.b, min(o.b, (o.r + o.g) * 0.5), spill / 100.0);
+    return float4(o, c.a * a);
+}
+@end
+
+@effect Screen Key
+@id gese.key.screen
+@category Keying
+@desc One-click green / blue screen key.
+@param choice screenColor "Screen" 0 "Green|Blue"
+@param float strength "Strength" 100 0 200 %
+@param float clipBlack "Clip Black" 10 0 100 %
+@param float clipWhite "Clip White" 90 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float diff = screenColor == 0 ? c.g - max(c.r, c.b) : c.b - max(c.r, c.g);
+    float a = 1.0 - saturate(diff * 4.0 * strength / 100.0);
+    a = saturate((a - clipBlack / 100.0) / max(clipWhite / 100.0 - clipBlack / 100.0, 1e-3));
+    float3 o = c.rgb;
+    if (screenColor == 0) o.g = min(o.g, max(o.r, o.b)); else o.b = min(o.b, max(o.r, o.g));
+    return float4(o, c.a * a);
+}
+@end
+
+@effect Luma Key
+@id gese.key.luma
+@category Keying
+@param choice keyType "Key Type" 0 "Key Out Darker|Key Out Brighter"
+@param float threshold "Threshold" 20 0 100 %
+@param float softness "Edge Feather" 10 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float s = softness / 100.0 + 1e-3;
+    float a = keyType == 0 ? smoothstep(threshold / 100.0, threshold / 100.0 + s, l) : 1.0 - smoothstep(threshold / 100.0 - s, threshold / 100.0, l);
+    return float4(c.rgb, c.a * a);
+}
+@end
+
+@effect Color Range Key
+@id gese.key.range
+@category Keying
+@desc Keys out a range of hues.
+@param angle hueCenter "Hue" 120
+@param float hueRange "Hue Range" 30 1 180 °
+@param float minSat "Minimum Saturation" 20 0 100 %
+@param float softness "Softness" 10 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 h = rgb2hsv(saturate(c.rgb));
+    float dh = abs(h.x - frac(hueCenter / 360.0));
+    dh = min(dh, 1.0 - dh) * 360.0;
+    float s = softness + 1e-3;
+    float inside = (1.0 - smoothstep(hueRange * 0.5, hueRange * 0.5 + s, dh)) * smoothstep(minSat / 100.0, minSat / 100.0 + s / 100.0, h.y);
+    return float4(c.rgb, c.a * (1.0 - inside));
+}
+@end
+
+@effect Spill Suppressor
+@id gese.key.spill
+@category Keying
+@param color spillColor "Color to Suppress" 0.1 0.75 0.2 1
+@param float amount "Suppression" 100 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 h = rgb2hsv(spillColor.rgb);
+    if (h.x > 0.2 && h.x < 0.45) c.g = lerp(c.g, min(c.g, (c.r + c.b) * 0.5), amount / 100.0);
+    else if (h.x > 0.5 && h.x < 0.75) c.b = lerp(c.b, min(c.b, (c.r + c.g) * 0.5), amount / 100.0);
+    else c.r = lerp(c.r, min(c.r, (c.g + c.b) * 0.5), amount / 100.0);
+    return c;
+}
+@end
+
+@effect Matte Choker
+@id gese.key.choker
+@category Keying
+@desc Shrinks (+) or grows (-) the alpha matte and softens it.
+@param float choke "Choke" 2 -20 20 px
+@param float softness "Softness" 1 0 20 px
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    int n = (int)clamp(abs(PX(choke)), 0.0, 20.0);
+    float a = c.a;
+    [loop] for (int y = -n; y <= n; y++)
+        [loop] for (int x = -n; x <= n; x++) {
+            if (x * x + y * y > n * n) continue;
+            float s = SRC(uv + float2(x, y) * TEXEL).a;
+            a = choke > 0 ? min(a, s) : max(a, s);
+        }
+    float sa = 0;
+    float r = PX(softness);
+    [unroll] for (int i = 0; i < 8; i++) { float an = i * 0.785398; sa += SRC(uv + float2(cos(an), sin(an)) * r * TEXEL).a; }
+    a = lerp(a, min(a, sa / 8.0 + 0.0), r > 0.1 ? 0.5 : 0.0);
+    return float4(c.rgb, a);
+}
+@end
+
+@effect Extract
+@id gese.key.extract
+@category Keying
+@desc Builds alpha from a brightness range.
+@param float blackPt "Black Point" 0 0 255
+@param float whitePt "White Point" 255 0 255
+@param float softness "Softness" 0 0 255
+@param bool invertE "Invert" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb) * 255.0;
+    float s = softness + 1e-3;
+    float a = smoothstep(blackPt - s, blackPt, l) * (1.0 - smoothstep(whitePt, whitePt + s, l));
+    if (invertE) a = 1.0 - a;
+    return float4(c.rgb, c.a * a);
+}
+@end
+
+@effect Alpha Feather
+@id gese.key.feather
+@category Keying
+@passes 2
+@desc Softens the alpha edge only (color stays sharp).
+@param float radius "Feather" 6 0 200 px
+@code
+float4 effect(float2 uv) {
+    float2 dir = PASS == 0 ? float2(1, 0) : float2(0, 1);
+    float a = blur1D(uv, dir, radius).a;
+    float4 c = PASS == 0 ? SRC(uv) : ORIG(uv);
+    if (PASS == 0) return float4(c.rgb, a);
+    return float4(ORIG(uv).rgb, min(a, 1.0) * step(0.0, a));
+}
+@end
+
+@effect Remove Color Matting
+@id gese.key.matting
+@category Keying
+@desc Removes a background color fringe from semi-transparent edges.
+@param color bgColor "Background Color" 0 0 0 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    if (c.a > 1e-3 && c.a < 0.999) c.rgb = (c.rgb - bgColor.rgb * (1.0 - c.a)) / c.a;
+    return c;
+}
+@end

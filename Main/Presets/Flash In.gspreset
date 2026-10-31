@@ -1,0 +1,49 @@
+{
+    "name":  "Flash In",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900070,
+                        "def":  "gese.lt.flash",
+                        "name":  "Flash",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ],
+                                          "k":  [
+                                                    {
+                                                        "t":  0,
+                                                        "v":  [
+                                                                  100
+                                                              ],
+                                                        "i":  0,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  0.25,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  0
+                                                    }
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "flashMode":  {
+                                                         "v":  [
+                                                                   0
+                                                               ],
+                                                         "step":  true
+                                                     }
+                                   }
+                    }
+                ]
+}

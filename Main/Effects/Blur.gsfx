@@ -1,0 +1,214 @@
+// GeSe built-in effects: Blur & Sharpen
+
+@effect Gaussian Blur
+@id gese.blur.gaussian
+@category Blur & Sharpen
+@desc Smooth gaussian blur (separable, two passes).
+@passes 2
+@param float blurriness "Blurriness" 20 0 600 px
+@param choice dims "Blur Dimensions" 0 "Horizontal and Vertical|Horizontal|Vertical"
+@param bool repeatEdge "Repeat Edge Pixels" 0
+@code
+float4 effect(float2 uv) {
+    float2 dir = PASS == 0 ? float2(1, 0) : float2(0, 1);
+    bool on = dims == 0 || (dims == 1 && PASS == 0) || (dims == 2 && PASS == 1);
+    if (!on) return SRC(uv);
+    return unpremul(blur1DEdge(uv, dir, blurriness, repeatEdge ? 3 : 0));
+}
+@end
+
+@effect Box Blur
+@id gese.blur.box
+@category Blur & Sharpen
+@passes 2
+@param float radius "Blur Radius" 10 0 300 px
+@param bool repeatEdge "Repeat Edge Pixels" 0
+@code
+float4 effect(float2 uv) {
+    float2 dir = PASS == 0 ? float2(1, 0) : float2(0, 1);
+    float r = PX(radius);
+    if (r < 0.5) return SRC(uv);
+    int n = (int)clamp(r, 1.0, 48.0);
+    float st = r / n;
+    float4 acc = 0;
+    [loop] for (int i = -n; i <= n; i++) acc += SRCEP(uv + dir * i * st * TEXEL, repeatEdge ? 3 : 0);
+    return unpremul(acc / (2 * n + 1));
+}
+@end
+
+@effect Directional Blur
+@id gese.blur.directional
+@category Blur & Sharpen
+@param angle direction "Direction" 0
+@param float blurLength "Blur Length" 30 0 2000 px
+@code
+float4 effect(float2 uv) {
+    float a = radians(direction);
+    float2 d = float2(cos(a), sin(a)) * PX(blurLength) * TEXEL;
+    float4 acc = 0;
+    const int N = 48;
+    [loop] for (int i = 0; i < N; i++) acc += SRCP(uv + d * (i / (float)(N - 1) - 0.5));
+    return unpremul(acc / N);
+}
+@end
+
+@effect Radial Blur
+@id gese.blur.radial
+@category Blur & Sharpen
+@desc Spin blur around a center.
+@param angle amount "Amount" 8
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float a = radians(amount);
+    float4 acc = 0;
+    const int N = 48;
+    [loop] for (int i = 0; i < N; i++) acc += SRCP(rotUV(uv, center, (i / (float)(N - 1) - 0.5) * a));
+    return unpremul(acc / N);
+}
+@end
+
+@effect Zoom Blur
+@id gese.blur.zoom
+@category Blur & Sharpen
+@param float amount "Amount" 15 0 100 %
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float k = amount / 100.0;
+    float4 acc = 0;
+    const int N = 48;
+    [loop] for (int i = 0; i < N; i++) acc += SRCP(center + (uv - center) * (1.0 - k * (i / (float)(N - 1))));
+    return unpremul(acc / N);
+}
+@end
+
+@effect Camera Lens Blur
+@id gese.blur.lens
+@category Blur & Sharpen
+@desc Bokeh disc blur with glowing highlights.
+@param float radius "Iris Radius" 12 0 200 px
+@param float gain "Specular Brightness" 2 0 10
+@param float threshold "Specular Threshold" 75 0 100 %
+@code
+float4 effect(float2 uv) {
+    float r = PX(radius);
+    if (r < 0.5) return SRC(uv);
+    float4 acc = 0;
+    float wsum = 0;
+    const int N = 96;
+    [loop] for (int i = 0; i < N; i++) {
+        float a = i * 2.39996323, rr = sqrt((i + 0.5) / N) * r;
+        float4 c = SRCP(uv + float2(cos(a), sin(a)) * rr * TEXEL);
+        float w = 1.0 + gain * smoothstep(threshold / 100.0, 1.0, luma(c.rgb));
+        acc += c * w;
+        wsum += w;
+    }
+    return unpremul(acc / wsum);
+}
+@end
+
+@effect Sharpen
+@id gese.blur.sharpen
+@category Blur & Sharpen
+@param float amount "Sharpen Amount" 25 0 200
+@code
+float4 effect(float2 uv) {
+    float2 t = TEXEL;
+    float4 c = SRC(uv);
+    float3 n = SRC(uv + float2(t.x, 0)).rgb + SRC(uv - float2(t.x, 0)).rgb + SRC(uv + float2(0, t.y)).rgb + SRC(uv - float2(0, t.y)).rgb;
+    c.rgb += (c.rgb * 4.0 - n) * amount / 50.0;
+    return c;
+}
+@end
+
+@effect Unsharp Mask
+@id gese.blur.unsharp
+@category Blur & Sharpen
+@passes 2
+@param float amount "Amount" 60 0 500 %
+@param float radius "Radius" 3 0.5 100 px
+@param float threshold "Threshold" 0 0 255
+@code
+float4 effect(float2 uv) {
+    if (PASS == 0) return unpremul(blur1D(uv, float2(1, 0), radius));
+    float4 b = unpremul(blur1D(uv, float2(0, 1), radius));
+    float4 o = ORIG(uv);
+    float3 diff = o.rgb - b.rgb;
+    float m = step(threshold / 255.0, abs(luma(diff)));
+    o.rgb += diff * amount / 100.0 * m;
+    return o;
+}
+@end
+
+@effect Channel Blur
+@id gese.blur.channel
+@category Blur & Sharpen
+@passes 2
+@param float redB "Red Blurriness" 0 0 300 px
+@param float greenB "Green Blurriness" 0 0 300 px
+@param float blueB "Blue Blurriness" 20 0 300 px
+@param float alphaB "Alpha Blurriness" 0 0 300 px
+@code
+float4 effect(float2 uv) {
+    float2 dir = PASS == 0 ? float2(1, 0) : float2(0, 1);
+    float4 r = blur1D(uv, dir, redB), g = blur1D(uv, dir, greenB), b = blur1D(uv, dir, blueB), a = blur1D(uv, dir, alphaB);
+    return float4(unpremul(r).r, unpremul(g).g, unpremul(b).b, a.a);
+}
+@end
+
+@effect Smart Blur
+@id gese.blur.smart
+@category Blur & Sharpen
+@desc Edge-preserving (bilateral) smoothing - great for skin.
+@param float radius "Radius" 6 1 30 px
+@param float threshold "Threshold" 15 1 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c0 = SRC(uv);
+    float r = PX(radius);
+    int n = (int)clamp(r, 1.0, 7.0);
+    float st = r / n;
+    float th = threshold / 100.0;
+    float4 acc = 0;
+    float ws = 0;
+    [loop] for (int y = -n; y <= n; y++)
+        [loop] for (int x = -n; x <= n; x++) {
+            float4 c = SRC(uv + float2(x, y) * st * TEXEL);
+            float3 d = c.rgb - c0.rgb;
+            float w = exp(-dot(d, d) / (2.0 * th * th)) * exp(-(x * x + y * y) / (2.0 * n * n + 1.0));
+            acc += c * w;
+            ws += w;
+        }
+    return acc / ws;
+}
+@end
+
+@effect Tilt-Shift
+@id gese.blur.tiltshift
+@category Blur & Sharpen
+@desc Miniature effect: sharp band, blurred above and below.
+@param point focus "Focus Center" 0.5 0.55
+@param float band "Focus Band" 20 0 100 %
+@param float falloff "Falloff" 25 1 100 %
+@param float blurAmt "Blur" 18 0 150 px
+@param angle rotationA "Rotation" 0
+@code
+float4 effect(float2 uv) {
+    float2 d = (uv - focus) * RES;
+    float a = radians(rotationA);
+    float dist = abs(dot(d, float2(-sin(a), cos(a)))) / RES.y;
+    float k = smoothstep(band / 200.0, band / 200.0 + falloff / 100.0, dist);
+    float r = PX(blurAmt) * k;
+    if (r < 0.5) return SRC(uv);
+    float4 acc = 0;
+    const int N = 48;
+    [loop] for (int i = 0; i < N; i++) {
+        float an = i * 2.39996323, rr = sqrt((i + 0.5) / N) * r;
+        acc += SRCP(uv + float2(cos(an), sin(an)) * rr * TEXEL);
+    }
+    float4 c = unpremul(acc / N);
+    c.rgb = lerp(c.rgb, c.rgb * 1.08, k);
+    return c;
+}
+@end

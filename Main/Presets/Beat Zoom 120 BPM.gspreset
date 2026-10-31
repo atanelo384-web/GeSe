@@ -1,0 +1,45 @@
+{
+    "name":  "Beat Zoom 120 BPM",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900050,
+                        "def":  "gese.motion.zoompulse",
+                        "name":  "Zoom Pulse",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "bpm":  {
+                                                   "v":  [
+                                                             120
+                                                         ]
+                                               },
+                                       "zoomAmt":  {
+                                                       "v":  [
+                                                                 12
+                                                             ]
+                                                   },
+                                       "sharp":  {
+                                                     "v":  [
+                                                               7
+                                                           ]
+                                                 },
+                                       "mblur":  {
+                                                     "v":  [
+                                                               40
+                                                           ]
+                                                 }
+                                   }
+                    }
+                ]
+}

@@ -1,0 +1,313 @@
+// GeSe built-in effects: Glitch (Intensity scales the effect, Speed the animation)
+
+@effect RGB Split
+@id gese.gl.rgbsplit
+@category Glitch
+@mix manual
+@param float amount "Amount" 10 0 500 px
+@param angle splitAngle "Angle" 0
+@param choice splitMode "Mode" 0 "RGB|Red / Cyan|Green / Magenta|Blue / Yellow"
+@param bool radial "Radial (from center)" 0
+@code
+float4 effect(float2 uv) {
+    float2 o;
+    if (radial) o = (uv - 0.5) * PX(amount) * 4.0 * TEXEL * INTENSITY;
+    else { float a = radians(splitAngle); o = float2(cos(a), sin(a)) * PX(amount) * TEXEL * INTENSITY; }
+    float4 c = SRC(uv), p = SRC(uv + o), m = SRC(uv - o);
+    if (splitMode == 0) c = float4(p.r, c.g, m.b, max(c.a, max(p.a, m.a)));
+    else if (splitMode == 1) c = float4(p.r, m.g, m.b, max(p.a, m.a));
+    else if (splitMode == 2) c = float4(m.r, p.g, m.b, max(p.a, m.a));
+    else c = float4(m.r, m.g, p.b, max(p.a, m.a));
+    return c;
+}
+@end
+
+@effect Digital Glitch
+@id gese.gl.digital
+@category Glitch
+@mix manual
+@speed
+@param float blockSize "Block Size" 40 2 500 px
+@param float amount "Amount" 40 0 100 %
+@param float shiftAmt "Max Shift" 80 0 1000 px
+@param float colorShift "Color Shift" 8 0 200 px
+@param float seedV "Random Seed" 0 0 100
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 12.0) + seedV * 31.0;
+    float2 blk = floor(uv * RES / float2(PX(blockSize) * 4.0, PX(blockSize)));
+    float h = hash12(blk + fr);
+    float2 q = uv;
+    float on = step(1.0 - amount / 100.0 * INTENSITY, h);
+    q.x += (hash12(blk.yx + fr * 1.3) - 0.5) * 2.0 * PX(shiftAmt) * TEXEL.x * on;
+    float cs = PX(colorShift) * TEXEL.x * (on + 0.2 * INTENSITY);
+    float4 c = SRCE(q, 1);
+    c.r = SRCE(q + float2(cs, 0), 1).r;
+    c.b = SRCE(q - float2(cs, 0), 1).b;
+    if (on > 0.5 && hash11(fr + h * 7.0) > 0.7) c.rgb = c.gbr;
+    return c;
+}
+@end
+
+@effect Scan Glitch
+@id gese.gl.scan
+@category Glitch
+@desc Horizontal line tearing.
+@mix manual
+@speed
+@param float amount "Tear Amount" 30 0 1000 px
+@param float density "Line Density" 60 1 400
+@param float chance "Probability" 30 0 100 %
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 20.0);
+    float row = floor(uv.y * density);
+    float h = hash11(row * 1.7 + fr * 3.3);
+    float on = step(1.0 - chance / 100.0, h) * INTENSITY;
+    float o = (hash11(row + fr) - 0.5) * 2.0 * PX(amount) * TEXEL.x * on;
+    return SRCE(uv + float2(o, 0), 1);
+}
+@end
+
+@effect Block Displace
+@id gese.gl.blocks
+@category Glitch
+@mix manual
+@speed
+@param float blockSize "Block Size" 60 4 800 px
+@param float amount "Displacement" 50 0 1000 px
+@param float chance "Probability" 25 0 100 %
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 10.0);
+    float2 blk = floor(uv * RES / max(PX(blockSize), 1.0));
+    float h = hash12(blk + fr * 7.7);
+    float on = step(1.0 - chance / 100.0, h) * INTENSITY;
+    float2 o = (hash22(blk + fr) - 0.5) * 2.0 * PX(amount) * TEXEL * on;
+    return SRCE(uv + o, 1);
+}
+@end
+
+@effect VHS
+@id gese.gl.vhs
+@category Glitch
+@mix manual
+@speed
+@param float noiseAmt "Noise" 20 0 100 %
+@param float bleed "Color Bleed" 4 0 50 px
+@param float tracking "Tracking Lines" 40 0 100 %
+@param float wobble "Wobble" 3 0 50 px
+@code
+float4 effect(float2 uv) {
+    float t = PHASE;
+    float k = INTENSITY;
+    float2 q = uv;
+    q.x += (vnoise(float2(uv.y * 40.0, t * 3.0)) - 0.5) * PX(wobble) * TEXEL.x * k;
+    float band = frac(uv.y * 0.7 - t * 0.15);
+    float tr = smoothstep(0.0, 0.02, band) * (1.0 - smoothstep(0.02, 0.05, band)) * tracking / 100.0 * k;
+    q.x += tr * 0.05 * (hash11(floor(uv.y * 200.0) + floor(t * 30.0)) - 0.5);
+    float b = PX(bleed) * TEXEL.x * k;
+    float4 c = SRC(q);
+    c.r = SRC(q + float2(b, 0)).r;
+    c.b = SRC(q - float2(b * 0.6, 0)).b;
+    float n = hash12(floor(uv * RES) + floor(t * 30.0) * 13.0) - 0.5;
+    c.rgb += n * noiseAmt / 100.0 * 0.4 * k + tr * 0.6;
+    float l = luma(c.rgb);
+    c.rgb = lerp(c.rgb, float3(l, l, l), 0.15 * k);
+    return c;
+}
+@end
+
+@effect Pixel Sort
+@id gese.gl.pixelsort
+@category Glitch
+@desc Streaks bright pixels in one direction (pixel-sorting look).
+@mix manual
+@param float threshold "Threshold" 60 0 100 %
+@param float sortLength "Length" 120 1 1000 px
+@param choice sdir "Direction" 0 "Down|Up|Right|Left"
+@code
+float4 effect(float2 uv) {
+    float2 d = sdir == 0 ? float2(0, -1) : sdir == 1 ? float2(0, 1) : sdir == 2 ? float2(-1, 0) : float2(1, 0);
+    float4 c = SRC(uv);
+    float4 best = c;
+    float bl = luma(c.rgb);
+    const int N = 40;
+    float len = PX(sortLength) * INTENSITY;
+    [loop] for (int i = 1; i <= N; i++) {
+        float4 s = SRC(uv + d * len * (i / (float)N) * TEXEL);
+        float l = luma(s.rgb);
+        if (l > threshold / 100.0 && l > bl) { best = s; bl = l; }
+        if (l < threshold / 100.0 * 0.7) break;
+    }
+    return lerp(c, best, 0.85);
+}
+@end
+
+@effect Interlace
+@id gese.gl.interlace
+@category Glitch
+@mix manual
+@speed
+@param float lineSize "Line Size" 2 1 50 px
+@param float offsetAmt "Offset" 6 0 200 px
+@code
+float4 effect(float2 uv) {
+    float row = floor(uv.y * RES.y / max(PX(lineSize), 1.0));
+    float odd = fmod(row, 2.0);
+    float o = odd * PX(offsetAmt) * sin(PHASE * 6.0) * INTENSITY * TEXEL.x;
+    float4 c = SRCE(uv + float2(o, 0), 3);
+    c.rgb *= 1.0 - odd * 0.12 * INTENSITY;
+    return c;
+}
+@end
+
+@effect Bad TV
+@id gese.gl.badtv
+@category Glitch
+@mix manual
+@speed
+@param float distortion "Distortion" 30 0 100 %
+@param float rollSpeed "Roll Speed" 0.2 0 5
+@param float noiseAmt "Static" 20 0 100 %
+@param float rgbAmt "RGB Offset" 4 0 50 px
+@code
+float4 effect(float2 uv) {
+    float t = PHASE;
+    float k = INTENSITY;
+    float y = frac(uv.y + t * rollSpeed * k);
+    float d = (vnoise(float2(y * 6.0, t * 4.0)) - 0.5) * distortion / 100.0 * 0.1 * k;
+    d += (vnoise(float2(y * 60.0, t * 20.0)) - 0.5) * distortion / 100.0 * 0.01 * k;
+    float2 q = float2(uv.x + d, y);
+    float o = PX(rgbAmt) * TEXEL.x * k;
+    float4 c = SRCE(q, 1);
+    c.r = SRCE(q + float2(o, 0), 1).r;
+    c.b = SRCE(q - float2(o, 0), 1).b;
+    c.rgb += (hash12(floor(uv * RES) + floor(t * 30.0) * 7.0) - 0.5) * noiseAmt / 100.0 * k;
+    return c;
+}
+@end
+
+@effect Slice Shift
+@id gese.gl.slices
+@category Glitch
+@mix manual
+@speed
+@param float slices "Slices" 12 1 200
+@param float maxOffset "Max Offset" 120 0 2000 px
+@param choice orient "Direction" 0 "Horizontal|Vertical"
+@param float seedV "Random Seed" 0 0 100
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 8.0) + seedV * 17.0;
+    float coord = orient == 0 ? uv.y : uv.x;
+    float idx = floor(coord * slices);
+    float o = (hash11(idx * 3.1 + fr) - 0.5) * 2.0 * PX(maxOffset) * INTENSITY;
+    float2 q = orient == 0 ? uv + float2(o * TEXEL.x, 0) : uv + float2(0, o * TEXEL.y);
+    return SRCE(q, 1);
+}
+@end
+
+@effect Data Mosh
+@id gese.gl.datamosh
+@category Glitch
+@desc Smearing compression-artifact look.
+@mix manual
+@speed
+@param float blockSize "Block Size" 16 2 200 px
+@param float smear "Smear" 60 0 500 px
+@param float chance "Probability" 40 0 100 %
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 6.0);
+    float2 blk = floor(uv * RES / max(PX(blockSize), 1.0));
+    float h = hash12(blk + fr * 3.0);
+    float on = step(1.0 - chance / 100.0, h) * INTENSITY;
+    float2 dir = normalize(hash22(blk * 0.1 + fr) - 0.5 + 1e-4);
+    float2 q = uv - dir * PX(smear) * TEXEL * on * hash11(blk.x + blk.y * 9.0 + fr);
+    float2 bq = (floor(q * RES / max(PX(blockSize), 1.0)) + 0.5) * max(PX(blockSize), 1.0) / RES;
+    return SRCE(lerp(q, bq, on * 0.6), 1);
+}
+@end
+
+@effect CRT Monitor
+@id gese.gl.crt
+@category Glitch
+@param float curvature "Curvature" 25 0 100 %
+@param float scan "Scanlines" 40 0 100 %
+@param float maskAmt "Shadow Mask" 30 0 100 %
+@param float vign "Vignette" 40 0 100 %
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * 2.0 - 1.0;
+    float k = curvature / 100.0 * 0.25;
+    p *= 1.0 + k * dot(p, p);
+    float2 q = p * 0.5 + 0.5;
+    if (q.x < 0 || q.x > 1 || q.y < 0 || q.y > 1) return float4(0, 0, 0, 1);
+    float4 c = SRC(q);
+    float s = 0.5 + 0.5 * sin(q.y * RES.y * PI / max(RSCALE * 1.5, 0.5));
+    c.rgb *= 1.0 - scan / 100.0 * 0.5 * (1.0 - s);
+    int m = (int)fmod(floor(uv.x * RES.x / max(RSCALE, 0.5)), 3.0);
+    float3 mask = m == 0 ? float3(1, 0.7, 0.7) : m == 1 ? float3(0.7, 1, 0.7) : float3(0.7, 0.7, 1);
+    c.rgb *= lerp(float3(1, 1, 1), mask, maskAmt / 100.0);
+    c.rgb *= 1.0 - vign / 100.0 * dot(p, p) * 0.35;
+    return c;
+}
+@end
+
+@effect Chromatic Jitter
+@id gese.gl.jitter
+@category Glitch
+@mix manual
+@speed
+@param float amount "Amount" 12 0 300 px
+@param float rate "Jitter Rate" 15 1 60 Hz
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * rate);
+    float2 offR = (hash22(float2(fr, 1.3)) - 0.5) * 2.0 * PX(amount) * TEXEL * INTENSITY;
+    float2 offB = (hash22(float2(fr, 7.9)) - 0.5) * 2.0 * PX(amount) * TEXEL * INTENSITY;
+    float4 c = SRC(uv);
+    c.r = SRC(uv + offR).r;
+    c.b = SRC(uv + offB).b;
+    return c;
+}
+@end
+
+@effect Signal Noise
+@id gese.gl.signal
+@category Glitch
+@mix manual
+@speed
+@param float bars "Noise Bars" 40 0 100 %
+@param float staticAmt "Static" 30 0 100 %
+@param float barCount "Bar Count" 6 1 50
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float t = PHASE;
+    float b = smoothstep(0.7, 1.0, sin((uv.y * barCount - t * 2.0) * TAU) * 0.5 + 0.5) * bars / 100.0;
+    float n = hash12(floor(uv * RES / max(RSCALE * 2.0, 1.0)) + floor(t * 30.0) * 11.0);
+    c.rgb = lerp(c.rgb, float3(n, n, n), saturate(b + staticAmt / 100.0 * 0.3) * INTENSITY);
+    return c;
+}
+@end
+
+@effect Wave Glitch
+@id gese.gl.waveglitch
+@category Glitch
+@mix manual
+@speed
+@param float amplitude "Amplitude" 40 0 1000 px
+@param float freqY "Frequency" 8 0.5 100
+@param float burst "Burst Probability" 40 0 100 %
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 6.0);
+    float on = step(1.0 - burst / 100.0, hash11(fr * 2.7)) * INTENSITY;
+    float o = sin(uv.y * freqY * TAU + PHASE * 20.0) * PX(amplitude) * TEXEL.x * on;
+    float4 c = SRCE(uv + float2(o, 0), 2);
+    c.r = SRCE(uv + float2(o * 1.3, 0), 2).r;
+    return c;
+}
+@end

@@ -1,0 +1,165 @@
+// GeSe built-in effects: Noise & Grain
+
+@effect Film Grain
+@id gese.nz.grain
+@category Noise & Grain
+@desc Organic film grain, stronger in mid-tones.
+@mix manual
+@speed
+@param float amount "Amount" 25 0 100 %
+@param float grainSize "Size" 1.5 0.5 10 px
+@param float colorAmt "Color" 15 0 100 %
+@param bool animate "Animated" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float fr = animate ? floor(PHASE * 24.0) : 0.0;
+    float2 p = uv * RES / max(PX(grainSize), 0.5);
+    float g = vnoise(p + fr * 17.3) - 0.5;
+    float3 gc = float3(vnoise(p + 3.1 + fr * 7.0), vnoise(p + 9.7 + fr * 5.0), vnoise(p + 21.3 + fr * 3.0)) - 0.5;
+    float3 n = lerp(float3(g, g, g), gc, colorAmt / 100.0);
+    float l = luma(c.rgb);
+    float mid = 1.0 - abs(l * 2.0 - 1.0) * 0.6;
+    c.rgb += n * amount / 100.0 * 0.6 * mid * INTENSITY;
+    return c;
+}
+@end
+
+@effect Add Noise
+@id gese.nz.add
+@category Noise & Grain
+@mix manual
+@speed
+@param float amount "Amount of Noise" 15 0 100 %
+@param bool colored "Use Color Noise" 1
+@param bool animate "Animated" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float fr = animate ? floor(PHASE * 30.0) : 0.0;
+    float2 p = floor(uv * RES) + fr * 13.7;
+    float3 n = colored ? float3(hash12(p), hash12(p + 5.3), hash12(p + 11.9)) - 0.5 : (hash12(p) - 0.5).xxx;
+    c.rgb += n * amount / 100.0 * INTENSITY;
+    return c;
+}
+@end
+
+@effect Median
+@id gese.nz.median
+@category Noise & Grain
+@desc 3x3 median filter: removes speckle noise while keeping edges.
+@param float radius "Radius" 1 1 4 px
+@code
+float3 med3(float3 a, float3 b, float3 c) { return max(min(a, b), min(max(a, b), c)); }
+float4 effect(float2 uv) {
+    float2 t = TEXEL * PX(radius);
+    float3 v[9];
+    int k = 0;
+    [unroll] for (int y = -1; y <= 1; y++) [unroll] for (int x = -1; x <= 1; x++) { v[k] = SRC(uv + float2(x, y) * t).rgb; k++; }
+    float3 r0 = med3(v[0], v[1], v[2]), r1 = med3(v[3], v[4], v[5]), r2 = med3(v[6], v[7], v[8]);
+    float3 c0 = med3(min(v[0], min(v[1], v[2])), min(v[3], min(v[4], v[5])), min(v[6], min(v[7], v[8])));
+    float3 c2 = med3(max(v[0], max(v[1], v[2])), max(v[3], max(v[4], v[5])), max(v[6], max(v[7], v[8])));
+    float3 m = med3(c0, med3(r0, r1, r2), c2);
+    return float4(m, SRC(uv).a);
+}
+@end
+
+@effect Old Film
+@id gese.nz.oldfilm
+@category Noise & Grain
+@desc Dust, scratches, flicker and gate weave.
+@mix manual
+@speed
+@param float dust "Dust" 40 0 100 %
+@param float scratches "Scratches" 40 0 100 %
+@param float flicker "Flicker" 30 0 100 %
+@param float weave "Gate Weave" 2 0 30 px
+@param bool sepiaTone "Sepia" 1
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 18.0);
+    float k = INTENSITY;
+    float2 q = uv + (hash22(float2(fr, 3.3)) - 0.5) * PX(weave) * TEXEL * 2.0 * k;
+    float4 c = SRC(q);
+    if (sepiaTone) { float l = luma(c.rgb); c.rgb = lerp(c.rgb, float3(l * 1.07, l * 0.95, l * 0.75), 0.8 * k); }
+    c.rgb *= 1.0 + (hash11(fr * 1.7) - 0.5) * flicker / 100.0 * 0.4 * k;
+    float sx = hash11(fr * 0.37) ;
+    float s = 1.0 - smoothstep(0.0, 0.0015, abs(uv.x - sx)) * step(0.6, hash11(fr * 2.1)) * scratches / 100.0;
+    float sx2 = hash11(fr * 0.71 + 3.0);
+    s *= 1.0 - smoothstep(0.0, 0.001, abs(uv.x - sx2 + sin(uv.y * 20.0) * 0.002)) * step(0.75, hash11(fr * 4.3)) * scratches / 100.0;
+    float d = vnoise(uv * RES / max(PX(6.0), 1.0) + fr * 41.0);
+    float spot = smoothstep(0.92, 0.97, d) * dust / 100.0;
+    c.rgb = lerp(c.rgb, c.rgb * s * (1.0 - spot * 0.9), k);
+    float2 v = uv - 0.5;
+    c.rgb *= 1.0 - dot(v, v) * 0.8 * k;
+    return c;
+}
+@end
+
+@effect Fractal Noise
+@id gese.nz.fractal
+@category Noise & Grain
+@desc Generates animated fractal noise and blends it with the layer.
+@speed
+@param float contrastV "Contrast" 100 0 400 %
+@param float brightness "Brightness" 0 -100 100
+@param float nScale "Scale" 200 5 5000 px
+@param float complexity "Complexity" 5 1 8
+@param float evoSpeed "Evolution Speed" 0.3 0 10
+@param choice blendMode "Blend" 0 "Replace|Overlay|Multiply|Screen|Add|Soft Light"
+@param bool invertN "Invert" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float n = fbm3(float3(uv * RES / max(PX(nScale), 1.0), PHASE * evoSpeed), (int)clamp(complexity, 1.0, 8.0));
+    n = saturate((n - 0.5) * contrastV / 100.0 * 2.0 + 0.5 + brightness / 100.0);
+    if (invertN) n = 1.0 - n;
+    float3 nn = n.xxx;
+    if (blendMode == 0) return float4(nn, 1);
+    if (blendMode == 1) c.rgb = blendOverlay(c.rgb, nn);
+    else if (blendMode == 2) c.rgb *= nn;
+    else if (blendMode == 3) c.rgb = blendScreen(c.rgb, nn);
+    else if (blendMode == 4) c.rgb += nn;
+    else c.rgb = blendSoft(c.rgb, nn);
+    return c;
+}
+@end
+
+@effect TV Static
+@id gese.nz.static
+@category Noise & Grain
+@speed
+@param float grainSize "Size" 2 1 20 px
+@param float rollBars "Roll Bars" 30 0 100 %
+@code
+float4 effect(float2 uv) {
+    float fr = floor(PHASE * 30.0);
+    float n = hash12(floor(uv * RES / max(PX(grainSize), 1.0)) + fr * 19.1);
+    n *= 1.0 - rollBars / 100.0 * 0.5 * (sin((uv.y - PHASE * 0.5) * 12.0) * 0.5 + 0.5);
+    return float4(n, n, n, 1);
+}
+@end
+
+@effect Noise Reduction
+@id gese.nz.denoise
+@category Noise & Grain
+@desc Edge-aware denoise.
+@param float strength "Strength" 50 0 100 %
+@param float detail "Detail" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c0 = SRC(uv);
+    float th = lerp(0.02, 0.25, strength / 100.0) * lerp(1.5, 0.5, detail / 100.0);
+    float4 acc = 0;
+    float ws = 0;
+    [unroll] for (int y = -2; y <= 2; y++)
+        [unroll] for (int x = -2; x <= 2; x++) {
+            float4 c = SRC(uv + float2(x, y) * TEXEL);
+            float3 d = c.rgb - c0.rgb;
+            float w = exp(-dot(d, d) / (2.0 * th * th)) * exp(-(x * x + y * y) / 8.0);
+            acc += c * w;
+            ws += w;
+        }
+    return acc / ws;
+}
+@end

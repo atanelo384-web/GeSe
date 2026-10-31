@@ -1,0 +1,385 @@
+// GeSe built-in effects: Light & Lens
+
+@effect Vignette
+@id gese.lt.vignette
+@category Light & Lens
+@mix manual
+@param float amount "Amount" 50 -100 100
+@param float midpoint "Midpoint" 50 0 100 %
+@param float roundness "Roundness" 50 0 100 %
+@param float feather "Feather" 50 1 100 %
+@param choice vigStyle "Vignette Color" 0 "Black|White|Custom Color"
+@param color vigColor "Color" 0 0 0 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= lerp(ASPECT, 1.0, roundness / 100.0);
+    float d = length(p) / lerp(ASPECT, 1.0, roundness / 100.0) * 0.75;
+    float m = smoothstep(midpoint / 100.0, midpoint / 100.0 + feather / 100.0, d);
+    float k = amount / 100.0 * INTENSITY;
+    int vs = (int)vigStyle;
+    float3 col = vs == 0 ? float3(0, 0, 0) : (vs == 1 ? float3(1, 1, 1) : vigColor.rgb);
+    if (k >= 0) c.rgb = lerp(c.rgb, col, m * k);
+    else c.rgb = lerp(c.rgb, 1.0 - col, m * -k);
+    return c;
+}
+@end
+
+@effect Lens Flare
+@id gese.lt.flare
+@category Light & Lens
+@mix manual
+@param point flareCenter "Flare Center" 0.25 0.25
+@param float brightness "Flare Brightness" 100 0 300 %
+@param color flareColor "Color" 1 0.8 0.55 1
+@param bool rays "Rays" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 asp = float2(ASPECT, 1.0);
+    float2 p = (uv - flareCenter) * asp;
+    float d = length(p);
+    float k = brightness / 100.0 * INTENSITY;
+    float3 f = flareColor.rgb * (0.02 / (d + 0.02)) * 1.5;
+    f += flareColor.rgb * exp(-d * 6.0) * 0.4;
+    if (rays) { float a = atan2(p.y, p.x); f += flareColor.rgb * pow(abs(sin(a * 6.0)), 40.0) * exp(-d * 4.0) * 0.6; }
+    float2 axis = (0.5 - flareCenter) * asp;
+    [unroll] for (int i = 1; i <= 5; i++) {
+        float2 gp = flareCenter * asp + axis * (i * 0.45) * 2.0;
+        float gd = length(uv * asp - gp);
+        float sz = 0.02 + 0.03 * frac(i * 0.37);
+        f += lerp(flareColor.rgb, float3(0.4, 0.7, 1.0), i / 5.0) * smoothstep(sz, sz * 0.6, gd) * 0.12;
+    }
+    float h = length(uv * asp - (flareCenter * asp + axis * 2.0));
+    f += float3(0.4, 0.6, 1.0) * smoothstep(0.02, 0.0, abs(h - 0.18)) * 0.15;
+    c.rgb += f * k;
+    c.a = max(c.a, saturate(luma(f * k)));
+    return c;
+}
+@end
+
+@effect Light Leak
+@id gese.lt.leak
+@category Light & Lens
+@mix manual
+@speed
+@param color leakColor "Color" 1 0.45 0.1 1
+@param point leakPos "Position" 0.85 0.2
+@param float leakSize "Size" 60 5 300 %
+@param float drift "Drift Speed" 0.3 0 5
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float t = PHASE * drift;
+    float2 p = leakPos + float2(sin(t * 1.3), cos(t * 0.9)) * 0.15;
+    float2 d = (uv - p) * float2(ASPECT, 1.0);
+    float n = fbm(uv * 3.0 + t * 0.4, 3);
+    float m = exp(-dot(d, d) / (leakSize / 100.0 * leakSize / 100.0 * 0.15)) * (0.6 + n * 0.8);
+    float3 col = lerp(leakColor.rgb, float3(1.0, 0.85, 0.5), n * 0.5);
+    c.rgb = blendScreen(c.rgb, col * m * INTENSITY);
+    return c;
+}
+@end
+
+@effect Light Rays
+@id gese.lt.rays
+@category Light & Lens
+@desc Volumetric god rays from a source point.
+@mix manual
+@param point source "Source Point" 0.5 0.3
+@param float rayLength "Ray Length" 40 0 100 %
+@param float threshold "Threshold" 60 0 100 %
+@param float strength "Strength" 1.2 0 6
+@param color rayColor "Tint" 1 0.95 0.85 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 d = (uv - source) * rayLength / 100.0;
+    float3 acc = 0;
+    const int N = 64;
+    float decay = 1.0;
+    [loop] for (int i = 0; i < N; i++) {
+        float2 q = uv - d * (i / (float)N);
+        float3 s = SRC(q).rgb;
+        acc += s * smoothstep(threshold / 100.0, 1.0, luma(s)) * decay;
+        decay *= 0.97;
+    }
+    acc = acc / N * strength * rayColor.rgb * INTENSITY;
+    c.rgb += acc;
+    c.a = max(c.a, saturate(luma(acc)));
+    return c;
+}
+@end
+
+@effect Bloom
+@id gese.lt.bloom
+@category Light & Lens
+@desc Soft, wide highlight bloom.
+@passes 3
+@mix manual
+@param float threshold "Threshold" 70 0 100 %
+@param float knee "Soft Knee" 30 0 100 %
+@param float radius "Radius" 60 1 600 px
+@param float strength "Strength" 1 0 8
+@code
+float4 effect(float2 uv) {
+    float r = max(PX(radius), 1.0);
+    int n = (int)clamp(r * 0.5, 1.0, 40.0);
+    float st = r / n, sigma = r * 0.5;
+    if (PASS == 0) {
+        float3 acc = 0; float ws = 0;
+        [loop] for (int i = -n; i <= n; i++) {
+            float4 c = ORIG(uv + float2(i * st, 0) * TEXEL);
+            float l = luma(c.rgb), th = threshold / 100.0, kn = knee / 100.0 * th + 1e-4;
+            float k = saturate((l - th + kn) / (2.0 * kn));
+            k = max(k * k * kn, l - th) / max(l, 1e-4);
+            float w = gauss(i * st, sigma);
+            acc += c.rgb * saturate(k) * c.a * w; ws += w;
+        }
+        return float4(acc / ws, 1);
+    }
+    if (PASS == 1) {
+        float3 acc = 0; float ws = 0;
+        [loop] for (int i = -n; i <= n; i++) { float w = gauss(i * st, sigma); acc += gSrc.SampleLevel(gLin, uv + float2(0, i * st) * TEXEL, 0).rgb * w; ws += w; }
+        return float4(acc / ws, 1);
+    }
+    float3 g = gSrc.SampleLevel(gLin, uv, 0).rgb * strength * INTENSITY;
+    float4 o = ORIG(uv);
+    float a = saturate(o.a + luma(g));
+    return float4((o.rgb * o.a + g) / max(a, 1e-4), a);
+}
+@end
+
+@effect Chromatic Aberration
+@id gese.lt.chromatic
+@category Light & Lens
+@desc Lens color fringing towards the edges.
+@mix manual
+@param float amount "Amount" 6 0 200 px
+@param float falloff "Falloff" 1.5 0.2 5
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float2 d = uv - center;
+    float k = pow(length(d * float2(ASPECT, 1.0)) * 1.4, falloff);
+    float2 o = normalize(d + 1e-6) * PX(amount) * k * TEXEL * INTENSITY;
+    float4 c = SRC(uv);
+    c.r = SRC(uv + o).r;
+    c.b = SRC(uv - o).b;
+    return c;
+}
+@end
+
+@effect Anamorphic Streaks
+@id gese.lt.anamorphic
+@category Light & Lens
+@desc Horizontal blue lens streaks from highlights.
+@passes 2
+@mix manual
+@param float threshold "Threshold" 80 0 100 %
+@param float streakLen "Length" 300 10 3000 px
+@param color streakColor "Color" 0.35 0.6 1 1
+@param float strength "Strength" 1.5 0 8
+@code
+float4 effect(float2 uv) {
+    if (PASS == 0) {
+        float r = PX(streakLen);
+        float3 acc = 0; float ws = 0;
+        const int N = 48;
+        [loop] for (int i = -N; i <= N; i++) {
+            float x = i / (float)N * r;
+            float4 c = ORIG(uv + float2(x, 0) * TEXEL);
+            float w = exp(-abs(i / (float)N) * 4.0);
+            acc += c.rgb * smoothstep(threshold / 100.0, 1.0, luma(c.rgb)) * c.a * w; ws += w;
+        }
+        return float4(acc / ws * 6.0, 1);
+    }
+    float3 s = gSrc.SampleLevel(gLin, uv, 0).rgb;
+    s = luma(s) * streakColor.rgb * strength * INTENSITY;
+    float4 o = ORIG(uv);
+    float a = saturate(o.a + luma(s));
+    return float4((o.rgb * o.a + s) / max(a, 1e-4), a);
+}
+@end
+
+@effect Halation
+@id gese.lt.halation
+@category Light & Lens
+@desc Red-orange film halation around bright edges.
+@passes 3
+@mix manual
+@param float threshold "Threshold" 65 0 100 %
+@param float radius "Radius" 18 1 300 px
+@param color haloColor "Color" 1 0.25 0.05 1
+@param float strength "Strength" 1.2 0 8
+@code
+float4 effect(float2 uv) {
+    float r = max(PX(radius), 1.0);
+    int n = (int)clamp(r, 1.0, 40.0);
+    float st = r / n, sigma = r * 0.5;
+    if (PASS == 0) {
+        float acc = 0; float ws = 0;
+        [loop] for (int i = -n; i <= n; i++) {
+            float4 c = ORIG(uv + float2(i * st, 0) * TEXEL);
+            float w = gauss(i * st, sigma);
+            acc += smoothstep(threshold / 100.0, 1.0, luma(c.rgb)) * c.a * w; ws += w;
+        }
+        return float4((acc / ws).xxx, 1);
+    }
+    if (PASS == 1) {
+        float acc = 0; float ws = 0;
+        [loop] for (int i = -n; i <= n; i++) { float w = gauss(i * st, sigma); acc += gSrc.SampleLevel(gLin, uv + float2(0, i * st) * TEXEL, 0).r * w; ws += w; }
+        return float4((acc / ws).xxx, 1);
+    }
+    float h = gSrc.SampleLevel(gLin, uv, 0).r;
+    float4 o = ORIG(uv);
+    float3 add = haloColor.rgb * h * strength * INTENSITY * (1.0 - luma(o.rgb) * 0.5);
+    float a = saturate(o.a + luma(add));
+    return float4((o.rgb * o.a + add) / max(a, 1e-4), a);
+}
+@end
+
+@effect Light Sweep
+@id gese.lt.sweep
+@category Light & Lens
+@desc A shiny band of light sweeps across (CC Light Sweep style).
+@mix manual
+@speed
+@param angle sweepAngle "Direction" 35
+@param float width "Width" 12 1 100 %
+@param float sweepInt "Sweep Intensity" 80 0 300 %
+@param color sweepColor "Light Color" 1 1 1 1
+@param float period "Period" 2 0.2 20 sec
+@param bool onAlpha "Only on Opaque Pixels" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = radians(sweepAngle);
+    float2 n = float2(cos(a), sin(a));
+    float pos = frac(PHASE / max(period, 0.05)) * 3.0 - 1.0;
+    float d = dot(uv - 0.5, n) - pos * 0.8;
+    float m = exp(-d * d / (width / 100.0 * width / 100.0 * 0.05 + 1e-5));
+    float3 add = sweepColor.rgb * m * sweepInt / 100.0 * INTENSITY;
+    if (onAlpha) add *= c.a;
+    c.rgb += add;
+    if (!onAlpha) c.a = max(c.a, saturate(m * sweepInt / 100.0 * INTENSITY));
+    return c;
+}
+@end
+
+@effect Flash
+@id gese.lt.flash
+@category Light & Lens
+@desc Color flash overlay. Keyframe Intensity for beat flashes.
+@mix manual
+@param color flashColor "Color" 1 1 1 1
+@param choice flashMode "Mode" 0 "Add|Screen|Normal|Overexpose"
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = INTENSITY;
+    if (flashMode == 0) c.rgb += flashColor.rgb * k;
+    else if (flashMode == 1) c.rgb = blendScreen(c.rgb, flashColor.rgb * k);
+    else if (flashMode == 2) c.rgb = lerp(c.rgb, flashColor.rgb, saturate(k));
+    else c.rgb *= exp2(k * 4.0);
+    return c;
+}
+@end
+
+@effect Lens Dirt
+@id gese.lt.dirt
+@category Light & Lens
+@desc Dirty lens smudges lit up by bright areas.
+@mix manual
+@param float amount "Amount" 60 0 300 %
+@param float dScale "Scale" 300 20 3000 px
+@param float threshold "Threshold" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float2 p = uv * RES / max(PX(dScale), 1.0);
+    float smudge = smoothstep(0.55, 0.85, fbm(p, 5)) + smoothstep(0.93, 0.99, vnoise(p * 6.0)) * 0.7;
+    float3 light = 0;
+    [unroll] for (int i = 0; i < 12; i++) { float a = i * 2.39996; float r = sqrt((i + 0.5) / 12.0) * 0.25; light += SRC(uv + float2(cos(a), sin(a)) * r).rgb; }
+    light /= 12.0;
+    float3 lit = light * smoothstep(threshold / 100.0 * 0.6, 1.0, luma(light)) * smudge;
+    c.rgb += lit * amount / 100.0 * 2.0 * INTENSITY;
+    return c;
+}
+@end
+
+@effect Exposure Flicker
+@id gese.lt.flicker
+@category Light & Lens
+@desc Random brightness flicker (old lights, candles, film).
+@mix manual
+@speed
+@param float amount "Amount" 30 0 200 %
+@param float rate "Rate" 12 0.5 60 Hz
+@param bool smoothF "Smooth" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float t = PHASE * rate;
+    float n = smoothF ? snoise1(t) : hash11(floor(t)) * 2.0 - 1.0;
+    c.rgb *= exp2(n * amount / 100.0 * INTENSITY);
+    return c;
+}
+@end
+
+@effect Angle Lens
+@id gese.lt.anglelens
+@category Light & Lens
+@desc Wide-angle camera lens: the picture bends toward the edges, the view angle tilts and can sway, the corners get a colour fringe and a soft blur. Intensity scales everything, Speed the sway.
+@mix manual
+@speed
+@param float bend "Lens Bend" 45 -100 100 %
+@param float bulge "Center Bulge" 40 -100 100 %
+@param angle viewAngle "View Angle" 6
+@param float sway "Sway" 0 0 100 %
+@param float swayFreq "Sway Frequency" 0.5 0.05 10 Hz
+@param float zoom "Zoom" 112 50 250 %
+@param point lensCenter "Center" 0.5 0.5
+@param float fringe "Edge Fringe" 25 0 100 %
+@param float edgeBlur "Edge Blur" 30 0 100 %
+@param float edgeDark "Edge Darkening" 20 0 100 %
+@param choice edge "Edge Mode" 3 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float2 angleLensUV(float2 uv) {
+    float k = bend / 100.0 * 0.85 * INTENSITY;
+    float a = radians(viewAngle + sway / 100.0 * 10.0 * sin(PHASE * swayFreq * 6.2831853)) * INTENSITY;
+    float z = lerp(1.0, zoom / 100.0, saturate(INTENSITY));
+    float2 asp = float2(ASPECT, 1.0);
+    float2 p = (uv - lensCenter) * asp;
+    p = rot2(p, -a);
+    float r2 = dot(p, p);
+    // the centre swells toward the camera (wide-angle look), the edges bend
+    float rn = saturate(sqrt(r2) / length(asp * 0.5));
+    float cb = 1.0 - bulge / 100.0 * 0.55 * INTENSITY * (1.0 - rn * rn);
+    p *= cb * (1.0 + k * r2) / z;
+    return p / asp + lensCenter;
+}
+float4 effect(float2 uv) {
+    float2 q = angleLensUV(uv);
+    float2 d = (uv - lensCenter) * float2(ASPECT, 1.0);
+    float e = saturate(dot(d, d) * 2.2);
+    float fr = fringe / 100.0 * 0.01 * INTENSITY * e;
+    float2 dir = normalize(q - lensCenter + 1e-5) * fr;
+    float4 c = unpremul(SRCEP(q, edge));
+    c.r = unpremul(SRCEP(q + dir, edge)).r;
+    c.b = unpremul(SRCEP(q - dir, edge)).b;
+    float eb = edgeBlur / 100.0 * INTENSITY * saturate(e * 1.6 - 0.25);
+    if (eb > 0.002) {
+        float4 acc = 0;
+        [unroll] for (int i = 0; i < 12; i++) {
+            float an = i * 0.5235988;
+            float rr = (i % 2 == 0) ? 1.0 : 0.55;
+            acc += unpremul(SRCEP(q + float2(cos(an), sin(an)) * TEXEL * eb * 14.0 * rr, edge));
+        }
+        c = lerp(c, acc / 12.0, saturate(eb * 1.8));
+    }
+    c.rgb *= 1.0 - edgeDark / 100.0 * INTENSITY * e * e;
+    return c;
+}
+@end

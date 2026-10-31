@@ -1,0 +1,413 @@
+// GeSe built-in effects: Filters (one-knob looks). Intensity is the main control - keyframe it.
+// Drop a filter on a layer, or on an empty part of the timeline to get a movable Effect Layer.
+
+@effect Mono
+@id gese.filter.mono
+@category Filters
+@desc Black & white. Keyframe Intensity to fade color in and out.
+@param float contrastV "Contrast" 10 -100 100 %
+@param color toneColor "Tone" 1 1 1 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    l = (l - 0.5) * (1.0 + contrastV / 100.0) + 0.5;
+    return float4(saturate(l) * toneColor.rgb, c.a);
+}
+@end
+
+@effect Saturation
+@id gese.filter.saturation
+@category Filters
+@desc Boosts or removes saturation. Intensity 0-200%.
+@mix manual
+@param choice satMode "Mode" 0 "Boost|Desaturate"
+@param float satAmount "Amount" 100 0 300 %
+@param bool protectSkin "Protect Skin Tones" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float k = satAmount / 100.0 * INTENSITY;
+    float s = satMode == 0 ? 1.0 + k : saturate(1.0 - k);
+    if (protectSkin) {
+        float h = rgb2hsv(c.rgb).x;
+        float skin = 1.0 - smoothstep(0.02, 0.09, abs(h - 0.07));
+        s = lerp(s, 1.0, skin * 0.7);
+    }
+    return float4(lerp(float3(l, l, l), c.rgb, s), c.a);
+}
+@end
+
+@effect Exposure Filter
+@id gese.filter.exposure
+@category Filters
+@desc Photographic exposure in stops. Intensity scales the stops.
+@mix manual
+@param float stops "Exposure" 1 -6 6 stops
+@param bool protectHighlights "Protect Highlights" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 e = c.rgb * exp2(stops * INTENSITY);
+    if (protectHighlights) e = e / (1.0 + max(e - 1.0, 0.0));
+    return float4(e, c.a);
+}
+@end
+
+@effect Brighten
+@id gese.filter.brighten
+@category Filters
+@desc Lightens the picture while keeping blacks. Intensity 0-200%.
+@mix manual
+@param float amount "Amount" 35 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = amount / 100.0 * INTENSITY;
+    c.rgb = 1.0 - pow(saturate(1.0 - c.rgb), 1.0 + k * 2.0);
+    return c;
+}
+@end
+
+@effect Darken
+@id gese.filter.darken
+@category Filters
+@desc Darkens mid-tones and shadows. Intensity 0-200%.
+@mix manual
+@param float amount "Amount" 35 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = amount / 100.0 * INTENSITY;
+    c.rgb = pow(max(c.rgb, 0.0), 1.0 + k * 2.0);
+    return c;
+}
+@end
+
+@effect Contrast
+@id gese.filter.contrast
+@category Filters
+@desc S-curve contrast around a pivot. Intensity 0-200%.
+@mix manual
+@param float amount "Amount" 40 -100 100 %
+@param float pivotV "Pivot" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = amount / 100.0 * INTENSITY;
+    float p = pivotV / 100.0;
+    c.rgb = (c.rgb - p) * (1.0 + k) + p;
+    return c;
+}
+@end
+
+@effect Warm
+@id gese.filter.warm
+@category Filters
+@desc Warm sunlight tone.
+@param float amount "Warmth" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = amount / 100.0;
+    c.rgb *= float3(1.0 + 0.18 * k, 1.0 + 0.04 * k, 1.0 - 0.22 * k);
+    return c;
+}
+@end
+
+@effect Cool
+@id gese.filter.cool
+@category Filters
+@desc Cold blue tone.
+@param float amount "Coolness" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float k = amount / 100.0;
+    c.rgb *= float3(1.0 - 0.2 * k, 1.0 + 0.02 * k, 1.0 + 0.22 * k);
+    return c;
+}
+@end
+
+@effect Vintage
+@id gese.filter.vintage
+@category Filters
+@desc Faded film look with warm highlights and lifted blacks.
+@param float fadeAmt "Fade" 30 0 100 %
+@param float warmth "Warmth" 40 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb = lerp(c.rgb, float3(l, l, l), 0.25);
+    c.rgb = c.rgb * (1.0 - fadeAmt / 100.0 * 0.25) + fadeAmt / 100.0 * 0.12;
+    c.rgb *= float3(1.0 + warmth / 100.0 * 0.12, 1.0 + warmth / 100.0 * 0.03, 1.0 - warmth / 100.0 * 0.15);
+    float2 d = uv - 0.5;
+    c.rgb *= 1.0 - dot(d, d) * 0.6;
+    return c;
+}
+@end
+
+@effect Cinematic
+@id gese.filter.cinematic
+@category Filters
+@desc Teal shadows and orange skin - the blockbuster look.
+@param float tealAmt "Teal Shadows" 60 0 100 %
+@param float orangeAmt "Orange Highlights" 60 0 100 %
+@param float contrastV "Contrast" 20 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float3 teal = float3(0.0, 0.45, 0.55), orange = float3(1.0, 0.55, 0.2);
+    c.rgb = lerp(c.rgb, c.rgb * (1.0 - tealAmt / 200.0) + teal * tealAmt / 400.0, 1.0 - smoothstep(0.0, 0.55, l));
+    c.rgb = lerp(c.rgb, c.rgb * orange * 1.35, smoothstep(0.45, 1.0, l) * orangeAmt / 200.0);
+    c.rgb = (c.rgb - 0.5) * (1.0 + contrastV / 100.0 * 0.5) + 0.5;
+    return c;
+}
+@end
+
+@effect Fade
+@id gese.filter.fade
+@category Filters
+@desc Matte, faded blacks (lifted shadows).
+@param float lift "Lift Blacks" 15 0 50 %
+@param float soften "Soften Highlights" 8 0 50 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.rgb = lift / 100.0 + c.rgb * (1.0 - lift / 100.0 - soften / 100.0);
+    return c;
+}
+@end
+
+@effect Sepia
+@id gese.filter.sepia
+@category Filters
+@desc Old photograph sepia toning.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 s = float3(dot(c.rgb, float3(0.393, 0.769, 0.189)), dot(c.rgb, float3(0.349, 0.686, 0.168)), dot(c.rgb, float3(0.272, 0.534, 0.131)));
+    return float4(s, c.a);
+}
+@end
+
+@effect Noir
+@id gese.filter.noir
+@category Filters
+@desc High contrast black & white with deep shadows.
+@param float contrastV "Contrast" 60 0 200 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    l = smoothstep(0.0, 1.0, saturate((l - 0.5) * (1.0 + contrastV / 100.0) + 0.45));
+    return float4(l, l, l, c.a);
+}
+@end
+
+@effect Vivid
+@id gese.filter.vivid
+@category Filters
+@desc Punchy colors and contrast.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+    c.rgb = lerp(float3(l, l, l), c.rgb, 1.0 + 0.6 * (1.0 - (mx - mn)));
+    c.rgb = (c.rgb - 0.5) * 1.15 + 0.5;
+    return c;
+}
+@end
+
+@effect Dreamy
+@id gese.filter.dreamy
+@category Filters
+@desc Soft glowing highlights and lifted exposure.
+@param float glowSize "Softness" 12 0 60 px
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float4 acc = 0;
+    const int N = 24;
+    [loop] for (int i = 0; i < N; i++) {
+        float a = i * 2.39996323, r = sqrt((i + 0.5) / N) * PX(glowSize);
+        acc += SRCP(uv + float2(cos(a), sin(a)) * r * TEXEL);
+    }
+    float4 b = unpremul(acc / N);
+    c.rgb = blendScreen(c.rgb, b.rgb * 0.6) * 1.03;
+    return c;
+}
+@end
+
+@effect Night Vision
+@id gese.filter.nightvision
+@category Filters
+@desc Green night-vision goggles with noise and vignette.
+@speed
+@param float noiseAmt "Noise" 25 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb) * 1.6;
+    l += (hash12(floor(uv * RES) + floor(PHASE * 24.0) * 7.31) - 0.5) * noiseAmt / 100.0;
+    float2 d = uv - 0.5;
+    l *= 1.0 - dot(d, d) * 2.2;
+    return float4(saturate(l) * float3(0.25, 1.0, 0.3), c.a);
+}
+@end
+
+@effect Thermal
+@id gese.filter.thermal
+@category Filters
+@desc Heat-camera false colors.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = saturate(luma(c.rgb));
+    float3 a = float3(0, 0, 0.3), b = float3(0.6, 0, 0.8), d = float3(1, 0.2, 0), e = float3(1, 0.9, 0), f = float3(1, 1, 1);
+    float3 r = l < 0.25 ? lerp(a, b, l / 0.25) : l < 0.5 ? lerp(b, d, (l - 0.25) / 0.25) : l < 0.75 ? lerp(d, e, (l - 0.5) / 0.25) : lerp(e, f, (l - 0.75) / 0.25);
+    return float4(r, c.a);
+}
+@end
+
+@effect Duotone
+@id gese.filter.duotone
+@category Filters
+@desc Maps shadows and highlights to two colors (defaults: GeSe brand colors).
+@param color darkColor "Shadows" 0.153 0.071 0 1
+@param color lightColor "Highlights" 1 0.533 0.004 1
+@param float contrastV "Contrast" 0 -100 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = saturate((luma(c.rgb) - 0.5) * (1.0 + contrastV / 100.0) + 0.5);
+    return float4(lerp(darkColor.rgb, lightColor.rgb, l), c.a);
+}
+@end
+
+@effect Pastel
+@id gese.filter.pastel
+@category Filters
+@desc Soft, light, low-contrast pastel colors.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb = lerp(float3(l, l, l), c.rgb, 0.7);
+    c.rgb = c.rgb * 0.75 + 0.25;
+    return c;
+}
+@end
+
+@effect Golden Hour
+@id gese.filter.goldenhour
+@category Filters
+@desc Warm late-afternoon sun with glowing highlights.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb *= float3(1.15, 1.0, 0.78);
+    c.rgb += float3(0.12, 0.06, 0.0) * smoothstep(0.5, 1.0, l);
+    c.rgb = lerp(c.rgb, c.rgb * float3(1.05, 0.95, 0.9), 1.0 - l);
+    return c;
+}
+@end
+
+@effect Moody
+@id gese.filter.moody
+@category Filters
+@desc Desaturated, crushed, dark - for dramatic edits.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb = lerp(float3(l, l, l), c.rgb, 0.55);
+    c.rgb = pow(max(c.rgb, 0.0), 1.25) * float3(0.95, 1.0, 1.05);
+    c.rgb = (c.rgb - 0.5) * 1.12 + 0.48;
+    return c;
+}
+@end
+
+@effect Neon Pop
+@id gese.filter.neonpop
+@category Filters
+@desc Saturated magenta/cyan color pop.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 hsv = rgb2hsv(c.rgb);
+    hsv.y = saturate(hsv.y * 1.6);
+    hsv.x = frac(hsv.x + 0.04 * sin(hsv.x * TAU));
+    c.rgb = hsv2rgb(hsv);
+    c.rgb = blendSoft(c.rgb, float3(0.85, 0.2, 0.9) * (1.0 - luma(c.rgb)) + float3(0.1, 0.9, 0.95) * luma(c.rgb));
+    return c;
+}
+@end
+
+@effect Matte Black
+@id gese.filter.matteblack
+@category Filters
+@desc Crushed, matte shadows with neutral greys.
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb = lerp(float3(l, l, l), c.rgb, 0.8);
+    c.rgb = max(c.rgb, 0.07) * 0.95;
+    return c;
+}
+@end
+
+@effect Invert Filter
+@id gese.filter.invert
+@category Filters
+@desc Negative image (keyframe Intensity for flash cuts).
+@code
+float4 effect(float2 uv) { float4 c = SRC(uv); return float4(1.0 - c.rgb, c.a); }
+@end
+
+@effect Custom Filter
+@id gese.filter.custom
+@category Filters
+@desc Your own filter: every basic adjustment in one place. Save it as an Animation Preset to reuse it.
+@param float exposureV "Exposure" 0 -5 5 stops
+@param float contrastV "Contrast" 0 -100 100
+@param float highlightsV "Highlights" 0 -100 100
+@param float shadowsV "Shadows" 0 -100 100
+@param float whitesV "Whites" 0 -100 100
+@param float blacksV "Blacks" 0 -100 100
+@param float tempV "Temperature" 0 -100 100
+@param float tintV "Tint" 0 -100 100
+@param float vibranceV "Vibrance" 0 -100 100
+@param float saturationV "Saturation" 0 -100 100
+@param float fadeV "Fade" 0 0 100
+@param float vignetteV "Vignette" 0 -100 100
+@param float grainV "Grain" 0 0 100
+@param color tintColor "Color Overlay" 1 0.533 0.004 1
+@param float overlayV "Overlay Amount" 0 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 x = c.rgb * exp2(exposureV);
+    float l = luma(x);
+    x += (highlightsV / 100.0) * 0.5 * smoothstep(0.5, 1.0, l) * x;
+    x += (shadowsV / 100.0) * 0.5 * (1.0 - smoothstep(0.0, 0.5, l)) * (1.0 - x) * 0.6;
+    x = x * (1.0 + whitesV / 200.0) + blacksV / 400.0;
+    x = (x - 0.5) * (1.0 + contrastV / 100.0) + 0.5;
+    x *= float3(1.0 + tempV / 250.0 + tintV / 500.0, 1.0 - tintV / 250.0, 1.0 - tempV / 250.0 + tintV / 500.0);
+    l = luma(x);
+    float sat = max(x.r, max(x.g, x.b)) - min(x.r, min(x.g, x.b));
+    x = lerp(float3(l, l, l), x, 1.0 + vibranceV / 100.0 * (1.0 - saturate(sat)) + saturationV / 100.0);
+    x = x * (1.0 - fadeV / 400.0) + fadeV / 400.0;
+    float2 d = uv - 0.5;
+    x *= 1.0 - (vignetteV / 100.0) * dot(d, d) * 2.0;
+    x += (hash12(floor(uv * RES) + FRAME * 1.7) - 0.5) * grainV / 250.0;
+    x = lerp(x, blendOverlay(saturate(x), tintColor.rgb), overlayV / 100.0);
+    return float4(x, c.a);
+}
+@end

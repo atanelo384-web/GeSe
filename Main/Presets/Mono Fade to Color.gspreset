@@ -1,0 +1,44 @@
+{
+    "name":  "Mono Fade to Color",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900120,
+                        "def":  "gese.filter.mono",
+                        "name":  "Mono",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ],
+                                          "k":  [
+                                                    {
+                                                        "t":  0,
+                                                        "v":  [
+                                                                  100
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  1.0,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    }
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+
+                                   }
+                    }
+                ]
+}

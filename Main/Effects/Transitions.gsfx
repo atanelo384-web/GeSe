@@ -1,0 +1,712 @@
+// GeSe built-in effects: Transitions
+// Every transition has: Transition Completion (keyframe it) + Animate mode:
+//   Manual (Completion)  - you keyframe Completion yourself
+//   Transition In        - animates automatically over the first <Duration> seconds of the layer
+//   Transition Out       - animates automatically over the last <Duration> seconds of the layer
+//   In & Out             - both ends
+// Wipes make the layer disappear (revealing layers below). Effect-type transitions (zoom, glitch,
+// whip, flash...) work best on an Effect Layer placed over a cut.
+
+@effect Fade
+@id gese.tr.fade
+@category Transition
+@desc Fade in (appear) / fade out: to transparent, black, white or your own colour.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 1 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param choice fadeTo "Fade To" 0 "Transparent|Black|White|Custom Color"
+@param color fadeColor "Color" 1 1 1 1
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float4 c = SRC(uv);
+    int ft = (int)fadeTo;
+    if (ft == 0) c.a *= 1.0 - t;
+    else {
+        float3 col = ft == 1 ? float3(0, 0, 0) : (ft == 2 ? float3(1, 1, 1) : fadeColor.rgb);
+        c.rgb = lerp(c.rgb, col, t);
+    }
+    return c;
+}
+@end
+
+@effect Linear Wipe
+@id gese.tr.linearwipe
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param angle wipeAngle "Wipe Angle" 0
+@param float feather "Feather" 40 0 2000 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float a = radians(wipeAngle);
+    float2 dir = float2(cos(a), sin(a));
+    float2 p = (uv - 0.5) * RES;
+    float ext = abs(dir.x) * RES.x * 0.5 + abs(dir.y) * RES.y * 0.5;
+    float f = max(PX(feather), 1.0);
+    float e = lerp(-ext - f, ext + f, t);
+    float m = smoothstep(e - f * 0.5, e + f * 0.5, dot(p, dir));
+    float4 c = SRC(uv);
+    c.a *= m;
+    return c;
+}
+@end
+
+@effect Radial Wipe
+@id gese.tr.radialwipe
+@category Transition
+@desc Clock wipe around a center point.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param angle startAngle "Start Angle" 0
+@param point center "Wipe Center" 0.5 0.5
+@param choice wipeDir "Wipe" 0 "Clockwise|Counterclockwise|Both"
+@param float feather "Feather" 2 0 90 °
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 p = (uv - center) * RES;
+    float ang = frac((atan2(p.x, -p.y) - radians(startAngle)) / TAU + 1.0);
+    if (wipeDir == 1) ang = 1.0 - ang;
+    if (wipeDir == 2) ang = 1.0 - abs(ang * 2.0 - 1.0);
+    float f = max(feather / 360.0, 1e-4);
+    float m = smoothstep(t - f, t + f * 0.01, ang - f * 0.5 + f * t);
+    float4 c = SRC(uv);
+    c.a *= t >= 0.999 ? 0.0 : m;
+    return c;
+}
+@end
+
+@effect Iris Wipe
+@id gese.tr.iris
+@category Transition
+@desc Shape grows from the center and cuts the layer away.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param choice shape "Shape" 0 "Circle|Diamond|Square|Star|Heart"
+@param point center "Iris Center" 0.5 0.5
+@param float feather "Feather" 10 0 1000 px
+@param bool invertIris "Invert (iris in)" 0
+@code
+float shapeDist(float2 p) {
+    if (shape == 1) return abs(p.x) + abs(p.y);
+    if (shape == 2) return max(abs(p.x), abs(p.y));
+    if (shape == 3) { float a = atan2(p.y, p.x); float r = length(p); return r / (0.75 + 0.25 * cos(a * 5.0)); }
+    if (shape == 4) { float2 q = float2(p.x, -p.y + 0.25 * abs(p.x) * 1.3); q.y -= sqrt(abs(p.x)) * 0.35; return length(q) * 1.15; }
+    return length(p);
+}
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 p = (uv - center) * RES;
+    float maxR = length(max(center, 1.0 - center) * RES) * (shape == 0 ? 1.0 : 1.6);
+    float f = max(PX(feather), 1.0);
+    float r = t * (maxR + f);
+    float d = shapeDist(p);
+    float m = smoothstep(r - f, r, d);
+    if (invertIris) { float rr = (1.0 - t) * (maxR + f); m = 1.0 - smoothstep(rr - f, rr, d); }
+    float4 c = SRC(uv);
+    c.a *= saturate(m);
+    return c;
+}
+@end
+
+@effect Venetian Blinds
+@id gese.tr.blinds
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param angle direction "Direction" 0
+@param float width "Width" 60 2 2000 px
+@param float feather "Feather" 2 0 200 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float a = radians(direction);
+    float proj = dot(uv * RES, float2(-sin(a), cos(a)));
+    float w = max(PX(width), 1.0);
+    float s = frac(proj / w) * w;
+    float f = max(PX(feather), 0.5);
+    float m = smoothstep(t * w - f, t * w + f, s);
+    float4 c = SRC(uv);
+    c.a *= t >= 0.999 ? 0.0 : m;
+    return c;
+}
+@end
+
+@effect Barn Door
+@id gese.tr.barndoor
+@category Transition
+@desc Splits open from the center line.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param choice orient "Orientation" 0 "Vertical Split|Horizontal Split"
+@param float feather "Feather" 4 0 500 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float d = orient == 0 ? abs(uv.x - 0.5) * RES.x : abs(uv.y - 0.5) * RES.y;
+    float halfW = (orient == 0 ? RES.x : RES.y) * 0.5;
+    float f = max(PX(feather), 0.5);
+    float m = smoothstep(t * (halfW + f) - f, t * (halfW + f), d);
+    float4 c = SRC(uv);
+    c.a *= m;
+    return c;
+}
+@end
+
+@effect Block Dissolve
+@id gese.tr.blockdissolve
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param float blockSize "Block Size" 24 1 500 px
+@param float feather "Softness" 0 0 100 %
+@param float seedV "Random Seed" 0 0 100
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 b = floor(uv * RES / max(PX(blockSize), 1.0));
+    float h = hash12(b + seedV * 13.7);
+    float f = feather / 100.0 * 0.5 + 1e-3;
+    float m = smoothstep(t - f, t + f, h * (1.0 - 2.0 * f) + f);
+    float4 c = SRC(uv);
+    c.a *= t >= 0.999 ? 0.0 : m;
+    return c;
+}
+@end
+
+@effect Gradient Wipe
+@id gese.tr.gradientwipe
+@category Transition
+@desc Wipes by the layer's own brightness (dark parts disappear first).
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param float softness "Softness" 10 0 100 %
+@param bool invertG "Invert Gradient" 0
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    if (invertG) l = 1.0 - l;
+    float s = softness / 100.0 + 1e-3;
+    float m = smoothstep(t * (1.0 + s) - s, t * (1.0 + s), l);
+    c.a *= m;
+    return c;
+}
+@end
+
+@effect Ink Bleed
+@id gese.tr.inkbleed
+@category Transition
+@desc Organic noise dissolve with a colored edge.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.8 0.04 20 sec
+@param float noiseScale "Scale" 120 5 2000 px
+@param float softness "Softness" 4 0 50 %
+@param color edgeColor "Edge Color" 1 0.533 0.004 1
+@param float edgeWidth "Edge Width" 3 0 30 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float n = fbm(uv * RES / max(PX(noiseScale), 1.0), 5);
+    n = saturate((n - 0.15) / 0.7);
+    float s = softness / 100.0 + 1e-3, ew = edgeWidth / 100.0;
+    float th = t * (1.0 + s + ew) - s;
+    float m = smoothstep(th, th + s, n);
+    float e = smoothstep(th - ew, th, n) * (1.0 - m);
+    float4 c = SRC(uv);
+    c.rgb = lerp(c.rgb, edgeColor.rgb, saturate(e * 2.0));
+    c.a = max(c.a * m, e * edgeColor.a * c.a);
+    return c;
+}
+@end
+
+@effect Burn Away
+@id gese.tr.burn
+@category Transition
+@desc Film burn: the picture burns away with glowing edges.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 1 0.04 20 sec
+@param float noiseScale "Scale" 220 5 2000 px
+@param point origin "Burn Origin" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float n = fbm(uv * RES / max(PX(noiseScale), 1.0), 5) * 0.6 + length((uv - origin) * float2(ASPECT, 1)) * 0.5;
+    float th = t * 1.25 - 0.1;
+    float m = smoothstep(th, th + 0.02, n);
+    float glow = smoothstep(th - 0.08, th, n) * (1.0 - smoothstep(th, th + 0.06, n));
+    float4 c = SRC(uv);
+    float3 fire = lerp(float3(1.0, 0.35, 0.0), float3(1.0, 0.95, 0.7), glow);
+    c.rgb = c.rgb * m + fire * glow * 1.5;
+    c.a = saturate(c.a * m + glow * c.a);
+    return c;
+}
+@end
+
+@effect Dots Grid
+@id gese.tr.dots
+@category Transition
+@desc The layer breaks into dots that shrink away diagonally.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.7 0.04 20 sec
+@param float dotSize "Dot Size" 40 4 400 px
+@param float spread "Diagonal Delay" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float sz = max(PX(dotSize), 2.0);
+    float2 cell = floor(uv * RES / sz);
+    float2 f = frac(uv * RES / sz) - 0.5;
+    float delay = (cell.x + cell.y) / max(RES.x / sz + RES.y / sz, 1.0) * spread / 100.0;
+    float k = saturate((t * (1.0 + spread / 100.0) - delay));
+    float r = (1.0 - k) * 0.75;
+    float m = 1.0 - smoothstep(r - 0.03, r, length(f));
+    float4 c = SRC(uv);
+    c.a *= k <= 0.0 ? 1.0 : m;
+    return c;
+}
+@end
+
+@effect Diagonal Stripes
+@id gese.tr.stripes
+@category Transition
+@desc Alternating stripes slide out in opposite directions.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param float width "Stripe Width" 120 4 2000 px
+@param angle stripeAngle "Angle" 30
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float a = radians(stripeAngle);
+    float2 n = float2(cos(a), sin(a)), tng = float2(-n.y, n.x);
+    float2 p = uv * RES;
+    float idx = floor(dot(p, n) / max(PX(width), 1.0));
+    float dir = fmod(abs(idx), 2.0) < 1.0 ? 1.0 : -1.0;
+    float shift = t * t * (RES.x + RES.y) * dir;
+    float2 q = (p - tng * shift) / RES;
+    return SRC(q);
+}
+@end
+
+@effect Card Flip Grid
+@id gese.tr.cardflip
+@category Transition
+@desc A grid of cards flips away one after another.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 0 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.8 0.04 20 sec
+@param float rows "Rows" 6 1 40
+@param float cols "Columns" 10 1 60
+@param float spread "Delay Spread" 60 0 100 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 n = float2(max(cols, 1.0), max(rows, 1.0));
+    float2 cell = floor(uv * n), f = frac(uv * n) - 0.5;
+    float delay = (cell.x / n.x * 0.7 + cell.y / n.y * 0.3) * spread / 100.0;
+    float k = saturate((t * (1.0 + spread / 100.0) - delay) * 1.5);
+    float sx = cos(k * PI * 0.5);
+    if (sx < 1e-3) return float4(0, 0, 0, 0);
+    float2 g = float2(f.x / sx, f.y * (1.0 + k * 0.15 * f.x));
+    if (abs(g.x) > 0.5 || abs(g.y) > 0.5) return float4(0, 0, 0, 0);
+    float4 c = SRC((cell + g + 0.5) / n);
+    c.rgb *= 1.0 - k * 0.5;
+    return c;
+}
+@end
+
+@effect Slide Away
+@id gese.tr.slide
+@category Transition
+@desc Pushes the layer out of frame with motion blur.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 2 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param choice slideDir "Direction" 0 "Left|Right|Up|Down"
+@param float mblur "Motion Blur" 50 0 100 %
+@param bool easeOn "Ease" 1
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    if (easeOn) t = t * t * (3.0 - 2.0 * t);
+    float2 d = slideDir == 0 ? float2(-1, 0) : slideDir == 1 ? float2(1, 0) : slideDir == 2 ? float2(0, -1) : float2(0, 1);
+    float4 acc = 0;
+    const int N = 12;
+    float bl = mblur / 100.0 * 0.15 * sin(t * PI);
+    [loop] for (int i = 0; i < N; i++) acc += SRCP(uv - d * (t + bl * (i / (N - 1.0) - 0.5)));
+    return unpremul(acc / N);
+}
+@end
+
+@effect Shrink Away
+@id gese.tr.shrink
+@category Transition
+@desc Scales the layer down to nothing with an optional spin.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 2 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param float spinAmt "Spin" 180 -1440 1440 °
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    t = t * t * (3.0 - 2.0 * t);
+    float s = max(1.0 - t, 1e-3);
+    float2 p = (uv - center) * RES / s;
+    p = rot2(p, -radians(spinAmt) * t);
+    return SRC(center + p / RES);
+}
+@end
+
+@effect Split Apart
+@id gese.tr.split
+@category Transition
+@desc The two halves slide apart.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 2 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param choice orient "Split" 0 "Vertical|Horizontal"
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    t = t * t * (3.0 - 2.0 * t);
+    float2 q = uv;
+    if (orient == 0) q.x += (uv.x < 0.5 ? 0.5 : -0.5) * t;
+    else q.y += (uv.y < 0.5 ? 0.5 : -0.5) * t;
+    if (orient == 0 && ((uv.x < 0.5 && q.x > 0.5) || (uv.x >= 0.5 && q.x < 0.5))) return float4(0, 0, 0, 0);
+    if (orient == 1 && ((uv.y < 0.5 && q.y > 0.5) || (uv.y >= 0.5 && q.y < 0.5))) return float4(0, 0, 0, 0);
+    return SRC(q);
+}
+@end
+
+@effect Zoom Transition
+@id gese.tr.zoom
+@category Transition
+@desc Zoom punch with radial blur. Use In on the next clip and Out on the previous one.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.35 0.04 20 sec
+@param choice zoomDir "Zoom" 0 "In|Out"
+@param float zoomAmt "Zoom Amount" 120 0 1000 %
+@param float blurAmt "Blur" 60 0 100 %
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float z = zoomDir == 0 ? 1.0 + zoomAmt / 100.0 * t * t : 1.0 / (1.0 + zoomAmt / 100.0 * t * t);
+    float b = blurAmt / 100.0 * 0.3 * t;
+    float4 acc = 0;
+    const int N = 24;
+    [loop] for (int i = 0; i < N; i++) {
+        float s = z * (1.0 + b * (i / (float)(N - 1)));
+        acc += SRCEP(center + (uv - center) / s, 2);
+    }
+    return unpremul(acc / N);
+}
+@end
+
+@effect Spin Transition
+@id gese.tr.spin
+@category Transition
+@desc Rotating whoosh with spin blur.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.4 0.04 20 sec
+@param float spinAmt "Rotation" 180 -1440 1440 °
+@param float zoomAmt "Zoom" 30 0 300 %
+@param float blurAmt "Blur" 70 0 100 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float a = radians(spinAmt) * t * t;
+    float z = 1.0 + zoomAmt / 100.0 * t;
+    float b = radians(spinAmt) * blurAmt / 100.0 * 0.15 * t;
+    float4 acc = 0;
+    const int N = 24;
+    [loop] for (int i = 0; i < N; i++) {
+        float aa = a + b * (i / (float)(N - 1) - 0.5);
+        float2 p = rot2((uv - 0.5) * RES / z, -aa);
+        acc += SRCEP(0.5 + p / RES, 2);
+    }
+    return unpremul(acc / N);
+}
+@end
+
+@effect Glitch Transition
+@id gese.tr.glitch
+@category Transition
+@desc Digital breakup peaking at the cut.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.3 0.04 20 sec
+@param float strength "Strength" 100 0 300 %
+@param float blockSize "Block Size" 60 4 500 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY) * strength / 100.0;
+    float fr = floor(FRAME);
+    float2 blk = floor(uv * RES / float2(PX(blockSize) * 3.0, PX(blockSize)));
+    float h = hash12(blk + fr * 3.17);
+    float2 q = uv;
+    if (h < t * 0.7) q.x += (hash12(blk.yx + fr) - 0.5) * 0.3 * t;
+    float row = floor(uv.y * 40.0);
+    q.x += (hash11(row + fr * 7.0) - 0.5) * 0.06 * t * step(0.6, hash11(row * 3.1 + fr));
+    float sh = 0.02 * t;
+    float4 c = SRCE(q, 1);
+    c.r = SRCE(q + float2(sh, 0), 1).r;
+    c.b = SRCE(q - float2(sh, 0), 1).b;
+    return c;
+}
+@end
+
+@effect Pixelate Transition
+@id gese.tr.pixelate
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.4 0.04 20 sec
+@param float maxBlock "Max Block Size" 80 2 1000 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float b = max(1.0, PX(maxBlock) * t * t);
+    float2 q = (floor(uv * RES / b) + 0.5) * b / RES;
+    return SRC(q);
+}
+@end
+
+@effect Whip Pan
+@id gese.tr.whip
+@category Transition
+@desc Fast camera whip with directional blur.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.3 0.04 20 sec
+@param angle whipAngle "Direction" 0
+@param float distance "Distance" 100 0 400 %
+@param float blurAmt "Blur" 80 0 100 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float a = radians(whipAngle);
+    float2 d = float2(cos(a), sin(a));
+    float off = distance / 100.0 * t * t;
+    float bl = blurAmt / 100.0 * 0.4 * t;
+    float4 acc = 0;
+    const int N = 32;
+    [loop] for (int i = 0; i < N; i++) acc += SRCEP(uv - d * (off + bl * (i / (float)(N - 1) - 0.5)), 2);
+    return unpremul(acc / N);
+}
+@end
+
+@effect Flash Transition
+@id gese.tr.flash
+@category Transition
+@desc Bright flash at the cut.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.25 0.04 20 sec
+@param color flashColor "Color" 1 1 1 1
+@param float exposureBoost "Exposure Boost" 2 0 6 stops
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float4 c = SRC(uv);
+    c.rgb *= exp2(exposureBoost * t);
+    c.rgb = lerp(c.rgb, flashColor.rgb, t * t * flashColor.a);
+    return c;
+}
+@end
+
+@effect Dip to Color
+@id gese.tr.dip
+@category Transition
+@desc Dips to a solid color (black by default).
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param color dipColor "Color" 0 0 0 1
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float4 c = SRC(uv);
+    c.rgb = lerp(c.rgb, dipColor.rgb, t);
+    c.a = lerp(c.a, 1.0, t * dipColor.a);
+    return c;
+}
+@end
+
+@effect Blur Transition
+@id gese.tr.blur
+@category Transition
+@passes 2
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.4 0.04 20 sec
+@param float maxBlur "Max Blur" 80 0 500 px
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 dir = PASS == 0 ? float2(1, 0) : float2(0, 1);
+    return unpremul(blur1DEdge(uv, dir, maxBlur * t, 3));
+}
+@end
+
+@effect Ripple Transition
+@id gese.tr.ripple
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.6 0.04 20 sec
+@param float amplitude "Amplitude" 40 0 500 px
+@param float wavelength "Wavelength" 60 4 1000 px
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 p = (uv - center) * RES;
+    float d = length(p);
+    float w = sin(d / max(PX(wavelength), 1.0) * TAU - t * 20.0) * PX(amplitude) * t;
+    float2 n = d > 0.0 ? p / d : float2(0, 0);
+    return SRCE(uv + n * w * TEXEL, 2);
+}
+@end
+
+@effect Swirl Transition
+@id gese.tr.swirl
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param float swirlAngle "Swirl" 540 -3600 3600 °
+@param point center "Center" 0.5 0.5
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 p = (uv - center) * RES;
+    float R = length(RES) * 0.5;
+    float k = saturate(1.0 - length(p) / R);
+    p = rot2(p, radians(swirlAngle) * t * k * k);
+    return SRCE(center + p / RES, 2);
+}
+@end
+
+@effect Stretch Transition
+@id gese.tr.stretch
+@category Transition
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.35 0.04 20 sec
+@param choice orient "Direction" 0 "Horizontal|Vertical"
+@param float amount "Stretch" 400 0 2000 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float s = 1.0 + amount / 100.0 * t * t;
+    float2 q = uv - 0.5;
+    if (orient == 0) q.x /= s; else q.y /= s;
+    return SRCE(q + 0.5, 3);
+}
+@end
+
+@effect Chromatic Transition
+@id gese.tr.chroma
+@category Transition
+@desc RGB channels split apart around the cut.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.3 0.04 20 sec
+@param float splitAmt "Split" 60 0 1000 px
+@param float zoomAmt "Zoom" 10 0 200 %
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float2 q = 0.5 + (uv - 0.5) / (1.0 + zoomAmt / 100.0 * t);
+    float2 o = (q - 0.5) * PX(splitAmt) * t * TEXEL * 2.0;
+    float4 c = SRCE(q, 2);
+    c.r = SRCE(q + o, 2).r;
+    c.b = SRCE(q - o, 2).b;
+    return c;
+}
+@end
+
+@effect Impact Shake
+@id gese.tr.impact
+@category Transition
+@desc Hard camera hit that settles down.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 1 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param float amplitude "Amplitude" 60 0 1000 px
+@param float freq "Frequency" 18 1 60 Hz
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float tt = TIME * freq;
+    float2 o = float2(snoise1(tt), snoise1(tt + 37.0)) * PX(amplitude) * t * t;
+    return SRCE(uv - o * TEXEL, 2);
+}
+@end
+
+@effect Luma Fade
+@id gese.tr.lumafade
+@category Transition
+@desc Fades through overexposed white or crushed black.
+@mix manual
+@param float completion "Transition Completion" 0 0 100 %
+@param choice tmode "Animate" 3 "Manual (Completion)|Transition In|Transition Out|In & Out"
+@param float tdur "Duration" 0.5 0.04 20 sec
+@param choice target "Through" 0 "White|Black"
+@code
+float4 effect(float2 uv) {
+    float t = transitionAmount(completion, tmode, tdur) * saturate(INTENSITY);
+    float4 c = SRC(uv);
+    if (target == 0) c.rgb = 1.0 - (1.0 - saturate(c.rgb * exp2(t * 4.0))) * (1.0 - t);
+    else c.rgb = pow(max(c.rgb, 0.0), 1.0 + t * 6.0) * (1.0 - t);
+    return c;
+}
+@end

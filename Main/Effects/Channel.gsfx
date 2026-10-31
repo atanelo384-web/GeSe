@@ -1,0 +1,119 @@
+// GeSe built-in effects: Channel
+
+@effect Shift Channels
+@id gese.ch.shift
+@category Channel
+@param choice takeR "Take Red From" 0 "Red|Green|Blue|Alpha|Luminance|Full On|Full Off"
+@param choice takeG "Take Green From" 1 "Red|Green|Blue|Alpha|Luminance|Full On|Full Off"
+@param choice takeB "Take Blue From" 2 "Red|Green|Blue|Alpha|Luminance|Full On|Full Off"
+@param choice takeA "Take Alpha From" 3 "Red|Green|Blue|Alpha|Luminance|Full On|Full Off"
+@code
+float pick(float4 c, int k) {
+    if (k == 0) return c.r;
+    if (k == 1) return c.g;
+    if (k == 2) return c.b;
+    if (k == 3) return c.a;
+    if (k == 4) return luma(c.rgb);
+    if (k == 5) return 1.0;
+    return 0.0;
+}
+float4 effect(float2 uv) { float4 c = SRC(uv); return float4(pick(c, takeR), pick(c, takeG), pick(c, takeB), pick(c, takeA)); }
+@end
+
+@effect Minimax
+@id gese.ch.minimax
+@category Channel
+@desc Grows (maximum) or shrinks (minimum) bright areas.
+@param choice operation "Operation" 0 "Maximum|Minimum"
+@param float radius "Radius" 3 0 12 px
+@param choice chan "Channel" 0 "Color and Alpha|Alpha Only|Color Only"
+@code
+float4 effect(float2 uv) {
+    int n = (int)clamp(PX(radius), 0.0, 12.0);
+    float4 c0 = SRC(uv);
+    float4 m = c0;
+    [loop] for (int y = -n; y <= n; y++)
+        [loop] for (int x = -n; x <= n; x++) {
+            if (x * x + y * y > n * n) continue;
+            float4 c = SRC(uv + float2(x, y) * TEXEL);
+            m = operation == 0 ? max(m, c) : min(m, c);
+        }
+    if (chan == 1) return float4(c0.rgb, m.a);
+    if (chan == 2) return float4(m.rgb, c0.a);
+    return m;
+}
+@end
+
+@effect Alpha Levels
+@id gese.ch.alphalevels
+@category Channel
+@param float inBlack "Input Black" 0 0 255
+@param float inWhite "Input White" 255 0 255
+@param float gammaV "Gamma" 1 0.1 5
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.a = pow(saturate((c.a * 255.0 - inBlack) / max(inWhite - inBlack, 1.0)), 1.0 / gammaV);
+    return c;
+}
+@end
+
+@effect Solid Composite
+@id gese.ch.solidcomposite
+@category Channel
+@desc Puts the layer over a solid color.
+@param color backColor "Color" 0 0 0 1
+@param float opacityV "Opacity" 100 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float ba = backColor.a * opacityV / 100.0;
+    float a = c.a + ba * (1.0 - c.a);
+    float3 rgb = (c.rgb * c.a + backColor.rgb * ba * (1.0 - c.a)) / max(a, 1e-5);
+    return float4(rgb, a);
+}
+@end
+
+@effect Luma to Alpha
+@id gese.ch.lumaalpha
+@category Channel
+@desc Uses brightness as transparency.
+@param bool invertA "Invert" 0
+@param bool keepColor "Keep Color" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    if (invertA) l = 1.0 - l;
+    return float4(keepColor ? c.rgb : float3(1, 1, 1), c.a * l);
+}
+@end
+
+@effect Channel View
+@id gese.ch.view
+@category Channel
+@desc Shows a single channel as grayscale.
+@param choice chan "Channel" 0 "Red|Green|Blue|Alpha|Luminance|Saturation|Hue"
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 h = rgb2hsv(saturate(c.rgb));
+    float v = chan == 0 ? c.r : chan == 1 ? c.g : chan == 2 ? c.b : chan == 3 ? c.a : chan == 4 ? luma(c.rgb) : chan == 5 ? h.y : h.x;
+    return float4(v, v, v, 1);
+}
+@end
+
+@effect Unmultiply
+@id gese.ch.unmult
+@category Channel
+@desc Removes black: makes dark pixels transparent (for fire, sparks, light leaks on black).
+@param float strength "Strength" 100 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = max(c.r, max(c.g, c.b));
+    float k = strength / 100.0;
+    float na = lerp(1.0, a, k);
+    return float4(c.rgb / max(na, 1e-4), c.a * na);
+}
+@end

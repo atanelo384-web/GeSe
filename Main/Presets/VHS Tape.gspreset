@@ -1,0 +1,74 @@
+{
+    "name":  "VHS Tape",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900080,
+                        "def":  "gese.gl.vhs",
+                        "name":  "VHS",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+
+                                   }
+                    },
+                    {
+                        "id":  900080,
+                        "def":  "gese.nz.grain",
+                        "name":  "Film Grain",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "amount":  {
+                                                      "v":  [
+                                                                30
+                                                            ]
+                                                  }
+                                   }
+                    },
+                    {
+                        "id":  900080,
+                        "def":  "gese.lt.vignette",
+                        "name":  "Vignette",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "amount":  {
+                                                      "v":  [
+                                                                40
+                                                            ]
+                                                  }
+                                   }
+                    }
+                ]
+}

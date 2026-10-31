@@ -1,0 +1,45 @@
+{
+    "name":  "Smooth Swing",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900020,
+                        "def":  "gese.motion.swing",
+                        "name":  "Swing",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "swingAngle":  {
+                                                          "v":  [
+                                                                    10
+                                                                ]
+                                                      },
+                                       "freq":  {
+                                                    "v":  [
+                                                              0.8
+                                                          ]
+                                                },
+                                       "mblur":  {
+                                                     "v":  [
+                                                               50
+                                                           ]
+                                                 },
+                                       "zoomComp":  {
+                                                        "v":  [
+                                                                  12
+                                                              ]
+                                                    }
+                                   }
+                    }
+                ]
+}

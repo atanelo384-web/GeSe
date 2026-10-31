@@ -1,0 +1,23 @@
+// Example GeSe plugin. Copy this file, rename the effect and edit the HLSL.
+// Plugins appear in Effects & Presets (category below) after Window > Plugin Manager > Reload All.
+// Format reference: Help > Plugin SDK.
+
+@effect Jelly Wobble
+@id plugin.example.jellywobble
+@category Plugins
+@desc Example plugin: wobbly jelly distortion. Intensity and Speed are added automatically.
+@mix manual
+@speed
+@param float amount "Amount" 12 0 200 px
+@param float waves "Waves" 3 0.5 20
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float r = length(p) / max(RES.x, RES.y);
+    float w = sin(r * waves * TAU - PHASE * TAU) * PX(amount) * INTENSITY;
+    float2 n = length(p) > 0.0 ? normalize(p) : float2(0, 0);
+    return SRCE(uv + n * w * TEXEL, edge);
+}
+@end

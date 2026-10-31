@@ -1,0 +1,186 @@
+// GeSe built-in effects: Perspective
+
+@effect Drop Shadow
+@id gese.persp.dropshadow
+@category Perspective
+@mix manual
+@param color shadowColor "Shadow Color" 0 0 0 1
+@param float opacityV "Opacity" 50 0 100 %
+@param angle direction "Direction" 135
+@param float distance "Distance" 12 0 2000 px
+@param float softness "Softness" 15 0 300 px
+@param bool shadowOnly "Shadow Only" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = radians(direction - 90.0);
+    float2 o = float2(cos(a), sin(a)) * PX(distance) * TEXEL;
+    float s = PX(softness);
+    float sa = 0;
+    const int N = 32;
+    [loop] for (int i = 0; i < N; i++) {
+        float an = i * 2.39996323, r = sqrt((i + 0.5) / N) * s;
+        sa += SRC(uv - o + float2(cos(an), sin(an)) * r * TEXEL).a;
+    }
+    sa = sa / N * opacityV / 100.0 * shadowColor.a * saturate(INTENSITY);
+    if (shadowOnly) return float4(shadowColor.rgb, sa);
+    float outA = c.a + sa * (1.0 - c.a);
+    float3 rgb = (c.rgb * c.a + shadowColor.rgb * sa * (1.0 - c.a)) / max(outA, 1e-4);
+    return float4(rgb, outA);
+}
+@end
+
+@effect Bevel Alpha
+@id gese.persp.bevel
+@category Perspective
+@param float thickness "Edge Thickness" 4 0.5 50 px
+@param angle lightAngle "Light Angle" -60
+@param float lightInt "Light Intensity" 60 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float t = PX(thickness);
+    float ax = SRC(uv + float2(t, 0) * TEXEL).a - SRC(uv - float2(t, 0) * TEXEL).a;
+    float ay = SRC(uv + float2(0, t) * TEXEL).a - SRC(uv - float2(0, t) * TEXEL).a;
+    float a = radians(lightAngle);
+    float l = dot(float2(ax, ay), float2(cos(a), sin(a)));
+    c.rgb += -l * lightInt / 100.0;
+    return c;
+}
+@end
+
+@effect Long Shadow
+@id gese.persp.longshadow
+@category Perspective
+@desc Flat-design long shadow.
+@param angle direction "Direction" 45
+@param float shadowLen "Length" 200 1 3000 px
+@param color shadowColor "Color" 0 0 0 0.6
+@param bool fadeOut "Fade" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float a = radians(direction);
+    float2 d = float2(cos(a), sin(a)) * TEXEL;
+    float L = PX(shadowLen);
+    float m = 0;
+    const int N = 64;
+    [loop] for (int i = 1; i <= N; i++) {
+        float k = i / (float)N;
+        float s = SRC(uv - d * L * k).a;
+        m = max(m, s * (fadeOut ? 1.0 - k : 1.0));
+    }
+    m *= shadowColor.a;
+    float outA = c.a + m * (1.0 - c.a);
+    return float4((c.rgb * c.a + shadowColor.rgb * m * (1.0 - c.a)) / max(outA, 1e-4), outA);
+}
+@end
+
+@effect Reflection
+@id gese.persp.reflection
+@category Perspective
+@desc Mirror reflection below a floor line.
+@param float floorY "Floor Position" 70 0 100 %
+@param float opacityV "Reflection Opacity" 40 0 100 %
+@param float fadeLen "Fade Length" 50 1 100 %
+@param float blurAmt "Blur" 2 0 50 px
+@code
+float4 effect(float2 uv) {
+    float fy = floorY / 100.0;
+    float4 c = SRC(uv);
+    if (uv.y <= fy) return c;
+    float2 q = float2(uv.x, 2.0 * fy - uv.y);
+    float4 r = 0;
+    [unroll] for (int i = -2; i <= 2; i++) r += SRCP(q + float2(i * PX(blurAmt), 0) * TEXEL);
+    r = unpremul(r / 5.0);
+    float k = (1.0 - saturate((uv.y - fy) / (fadeLen / 100.0))) * opacityV / 100.0;
+    r.a *= k;
+    float outA = c.a + r.a * (1.0 - c.a);
+    return float4((c.rgb * c.a + r.rgb * r.a * (1.0 - c.a)) / max(outA, 1e-4), outA);
+}
+@end
+
+@effect 3D Rotate
+@id gese.persp.rotate3d
+@category Perspective
+@desc Rotates the layer like a 3D card with perspective.
+@mix manual
+@param angle rotX "X Rotation" 20
+@param angle rotY "Y Rotation" 25
+@param angle rotZ "Z Rotation" 0
+@param float fovV "Perspective" 50 0 100 %
+@param float zoomV "Distance" 100 20 400 %
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float k = INTENSITY;
+    float ax = radians(rotX) * k, ay = radians(rotY) * k, az = radians(rotZ) * k;
+    float3x3 Rx = float3x3(1, 0, 0, 0, cos(ax), -sin(ax), 0, sin(ax), cos(ax));
+    float3x3 Ry = float3x3(cos(ay), 0, sin(ay), 0, 1, 0, -sin(ay), 0, cos(ay));
+    float3x3 Rz = float3x3(cos(az), -sin(az), 0, sin(az), cos(az), 0, 0, 0, 1);
+    float3x3 R = mul(Rz, mul(Ry, Rx));
+    float f = lerp(20.0, 1.2, fovV / 100.0) * zoomV / 100.0;
+    float2 p = (uv - 0.5) * float2(ASPECT, 1.0);
+    float3 ro = float3(0, 0, -f);
+    float3 rd = normalize(float3(p, f));
+    float3 n = mul(R, float3(0, 0, 1));
+    float3 cp = float3(0, 0, 0);
+    float den = dot(rd, n);
+    if (abs(den) < 1e-5) return float4(0, 0, 0, 0);
+    float t = dot(cp - ro, n) / den;
+    if (t <= 0) return float4(0, 0, 0, 0);
+    float3 hit = ro + rd * t;
+    float3 local = mul(transpose(R), hit);
+    float2 q = local.xy / float2(ASPECT, 1.0) + 0.5;
+    return SRCE(q, edge);
+}
+@end
+
+@effect Cylinder
+@id gese.persp.cylinder
+@category Perspective
+@desc Wraps the layer around a cylinder.
+@mix manual
+@param float radius "Radius" 50 10 200 %
+@param angle rotationA "Rotation" 0
+@param choice axis "Axis" 0 "Vertical|Horizontal"
+@param float shading "Shading" 40 0 100 %
+@code
+float4 effect(float2 uv) {
+    float2 p = uv - 0.5;
+    float x = axis == 0 ? p.x : p.y;
+    float R = radius / 100.0 * 0.5;
+    if (abs(x) > R) return float4(0, 0, 0, 0);
+    float ang = asin(x / R);
+    float u = lerp(x / (2.0 * R), ang / PI, saturate(INTENSITY)) + rotationA / 360.0;
+    float2 q = axis == 0 ? float2(frac(u + 0.5), uv.y) : float2(uv.x, frac(u + 0.5));
+    float4 c = SRC(q);
+    c.rgb *= 1.0 - shading / 100.0 * (1.0 - cos(ang)) * 1.5;
+    return c;
+}
+@end
+
+@effect Sphere
+@id gese.persp.sphere
+@category Perspective
+@desc Wraps the layer onto a lit sphere.
+@mix manual
+@param float radius "Radius" 40 5 100 %
+@param angle rotY "Rotation" 0
+@param float shading "Shading" 50 0 100 %
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - 0.5) * float2(ASPECT, 1.0);
+    float R = radius / 100.0 * 0.5;
+    float d = length(p);
+    if (d > R) return float4(0, 0, 0, 0);
+    float3 n = float3(p / R, sqrt(1.0 - d * d / (R * R)));
+    float lon = atan2(n.x, n.z) + radians(rotY);
+    float lat = asin(clamp(n.y, -1.0, 1.0));
+    float2 q = float2(frac(lon / TAU + 0.5), lat / PI + 0.5);
+    float4 c = SRC(q);
+    float l = saturate(dot(n, normalize(float3(-0.5, -0.6, 0.8))));
+    c.rgb *= lerp(1.0, 0.25 + 0.95 * l, shading / 100.0);
+    return c;
+}
+@end

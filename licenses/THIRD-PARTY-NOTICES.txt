@@ -1,0 +1,23 @@
+GeSe v2.4.0 uses the following third-party components.
+Their files are in runtime\ and resources\ of this folder.
+
+FFmpeg (avcodec, avformat, avutil, avfilter, swscale, swresample)
+  https://ffmpeg.org — shared build from C:\ffmpeg (GPL build, includes Rubber Band,
+  x264, libvpx, LAME). Source code: https://ffmpeg.org/download.html
+
+Rubber Band Library (inside avfilter) — time-stretching and pitch-shifting
+  https://breakfastquay.com/rubberband/ — GPL
+
+ONNX Runtime 1.24 with DirectML — MIT License, Copyright (c) Microsoft Corporation
+  https://github.com/microsoft/onnxruntime  (see ONNXRuntime-LICENSE.txt)
+
+DirectML 1.15 — Microsoft DirectML redistributable
+  https://github.com/microsoft/DirectML
+
+BiRefNet (general, lite) background-removal model — MIT License, Copyright (c) 2024 ZhengPeng
+  https://github.com/ZhengPeng7/BiRefNet  (ONNX export from the rembg project)
+
+Microsoft Visual C++ runtime (msvcp140, vcruntime140) — Visual C++ Redistributable
+
+Dear ImGui (docking) — MIT License, Copyright (c) 2014-2026 Omar Cornut
+  https://github.com/ocornut/imgui

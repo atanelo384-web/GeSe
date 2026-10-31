@@ -1,0 +1,56 @@
+{
+    "name":  "Exposure Punch",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900130,
+                        "def":  "gese.filter.exposure",
+                        "name":  "Exposure Filter",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    0
+                                                ],
+                                          "k":  [
+                                                    {
+                                                        "t":  0,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  0.12,
+                                                        "v":  [
+                                                                  100
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  0.45,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    }
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "stops":  {
+                                                     "v":  [
+                                                               1.5
+                                                           ]
+                                                 }
+                                   }
+                    }
+                ]
+}

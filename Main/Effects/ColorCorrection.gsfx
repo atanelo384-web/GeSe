@@ -1,0 +1,512 @@
+// GeSe built-in effects: Color Correction (Intensity cross-fades with the original)
+
+@effect Brightness & Contrast
+@id gese.cc.brightnesscontrast
+@category Color Correction
+@param float brightness "Brightness" 0 -150 150
+@param float contrastV "Contrast" 0 -100 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.rgb += brightness / 150.0 * 0.5;
+    float k = contrastV >= 0 ? 1.0 + contrastV / 100.0 * 2.0 : 1.0 + contrastV / 100.0;
+    c.rgb = (c.rgb - 0.5) * k + 0.5;
+    return c;
+}
+@end
+
+@effect Exposure
+@id gese.cc.exposure
+@category Color Correction
+@param float exposureV "Exposure" 0 -6 6 stops
+@param float offsetV "Offset" 0 -0.5 0.5
+@param float gammaV "Gamma Correction" 1 0.1 5
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.rgb = pow(max(c.rgb * exp2(exposureV) + offsetV, 0.0), 1.0 / gammaV);
+    return c;
+}
+@end
+
+@effect Levels
+@id gese.cc.levels
+@category Color Correction
+@param choice chan "Channel" 0 "RGB|Red|Green|Blue|Alpha"
+@param float inBlack "Input Black" 0 0 255
+@param float inWhite "Input White" 255 0 255
+@param float gammaV "Gamma" 1 0.1 5
+@param float outBlack "Output Black" 0 0 255
+@param float outWhite "Output White" 255 0 255
+@code
+float lev(float x) {
+    x = saturate((x * 255.0 - inBlack) / max(inWhite - inBlack, 1.0));
+    x = pow(x, 1.0 / gammaV);
+    return (outBlack + x * (outWhite - outBlack)) / 255.0;
+}
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    if (chan == 0) c.rgb = float3(lev(c.r), lev(c.g), lev(c.b));
+    else if (chan == 1) c.r = lev(c.r);
+    else if (chan == 2) c.g = lev(c.g);
+    else if (chan == 3) c.b = lev(c.b);
+    else c.a = lev(c.a);
+    return c;
+}
+@end
+
+@effect Curves
+@id gese.cc.curves
+@category Color Correction
+@desc Five-point tone curve (shadows to highlights).
+@param choice chan "Channel" 0 "RGB|Red|Green|Blue|Luminance"
+@param float pShadow "Shadows" 0 -50 50
+@param float pDark "Darks" 0 -50 50
+@param float pMid "Midtones" 0 -50 50
+@param float pLight "Lights" 0 -50 50
+@param float pHigh "Highlights" 0 -50 50
+@code
+float curve(float x) {
+    float p[5] = {pShadow / 100.0, 0.25 + pDark / 100.0, 0.5 + pMid / 100.0, 0.75 + pLight / 100.0, 1.0 + pHigh / 100.0};
+    float fx = saturate(x) * 4.0;
+    int i = min((int)fx, 3);
+    float t = fx - i;
+    float p0 = p[max(i - 1, 0)], p1 = p[i], p2 = p[i + 1], p3 = p[min(i + 2, 4)];
+    if (i == 0) p0 = p1 - (p2 - p1);
+    if (i == 3) p3 = p2 + (p2 - p1);
+    return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t * t);
+}
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    if (chan == 0) c.rgb = float3(curve(c.r), curve(c.g), curve(c.b));
+    else if (chan == 1) c.r = curve(c.r);
+    else if (chan == 2) c.g = curve(c.g);
+    else if (chan == 3) c.b = curve(c.b);
+    else { float l = luma(c.rgb); c.rgb *= curve(l) / max(l, 1e-4); }
+    return c;
+}
+@end
+
+@effect Hue/Saturation
+@id gese.cc.huesat
+@category Color Correction
+@param angle hueShift "Master Hue" 0
+@param float satV "Master Saturation" 0 -100 100
+@param float lightV "Master Lightness" 0 -100 100
+@param bool colorize "Colorize" 0
+@param angle colHue "Colorize Hue" 25
+@param float colSat "Colorize Saturation" 60 0 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 hsv = rgb2hsv(saturate(c.rgb));
+    if (colorize) { hsv.x = frac(colHue / 360.0); hsv.y = colSat / 100.0; }
+    else { hsv.x = frac(hsv.x + hueShift / 360.0); hsv.y = saturate(hsv.y * (1.0 + satV / 100.0)); }
+    c.rgb = hsv2rgb(hsv);
+    c.rgb = lightV >= 0 ? lerp(c.rgb, 1.0, lightV / 100.0) : c.rgb * (1.0 + lightV / 100.0);
+    return c;
+}
+@end
+
+@effect Vibrance
+@id gese.cc.vibrance
+@category Color Correction
+@desc Boosts muted colors more than saturated ones.
+@param float vibranceV "Vibrance" 30 -100 100
+@param float satV "Saturation" 0 -100 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    float k = 1.0 + vibranceV / 100.0 * (1.0 - saturate(sat)) + satV / 100.0;
+    c.rgb = lerp(float3(l, l, l), c.rgb, k);
+    return c;
+}
+@end
+
+@effect Color Balance
+@id gese.cc.colorbalance
+@category Color Correction
+@param float sR "Shadow Red" 0 -100 100
+@param float sG "Shadow Green" 0 -100 100
+@param float sB "Shadow Blue" 0 -100 100
+@param float mR "Midtone Red" 0 -100 100
+@param float mG "Midtone Green" 0 -100 100
+@param float mB "Midtone Blue" 0 -100 100
+@param float hR "Highlight Red" 0 -100 100
+@param float hG "Highlight Green" 0 -100 100
+@param float hB "Highlight Blue" 0 -100 100
+@param bool preserveL "Preserve Luminosity" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float ws = 1.0 - smoothstep(0.0, 0.5, l), wh = smoothstep(0.5, 1.0, l), wm = saturate(1.0 - ws - wh);
+    c.rgb += (float3(sR, sG, sB) * ws + float3(mR, mG, mB) * wm + float3(hR, hG, hB) * wh) / 100.0 * 0.4;
+    if (preserveL) c.rgb *= l / max(luma(c.rgb), 1e-4);
+    return c;
+}
+@end
+
+@effect Lift Gamma Gain
+@id gese.cc.lgg
+@category Color Correction
+@desc Color-grading primaries. Tints are color wheels: white = neutral.
+@param float liftV "Lift" 0 -1 1
+@param float gammaV "Gamma" 1 0.2 4
+@param float gainV "Gain" 1 0 4
+@param float offsetV "Offset" 0 -0.5 0.5
+@param color liftTint "Lift Tint" 1 1 1 1
+@param color gammaTint "Gamma Tint" 1 1 1 1
+@param color gainTint "Gain Tint" 1 1 1 1
+@param float satV "Saturation" 100 0 300 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 lt = (liftTint.rgb - luma(liftTint.rgb)) * 0.25 + liftV;
+    float3 gn = gainV * lerp(float3(1, 1, 1), gainTint.rgb / max(luma(gainTint.rgb), 1e-3), 0.5);
+    float3 gm = gammaV * lerp(float3(1, 1, 1), gammaTint.rgb / max(luma(gammaTint.rgb), 1e-3), 0.3);
+    float3 x = c.rgb * gn + lt * (1.0 - c.rgb) + offsetV;
+    x = pow(max(x, 0.0), 1.0 / max(gm, 0.05));
+    float l = luma(x);
+    c.rgb = lerp(float3(l, l, l), x, satV / 100.0);
+    return c;
+}
+@end
+
+@effect White Balance
+@id gese.cc.whitebalance
+@category Color Correction
+@param float tempV "Temperature" 0 -100 100
+@param float tintV "Tint" 0 -100 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.rgb *= float3(1.0 + tempV / 250.0 + tintV / 500.0, 1.0 - tintV / 250.0, 1.0 - tempV / 250.0 + tintV / 500.0);
+    return c;
+}
+@end
+
+@effect Tint
+@id gese.cc.tint
+@category Color Correction
+@param color mapBlack "Map Black To" 0 0 0 1
+@param color mapWhite "Map White To" 1 1 1 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    c.rgb = lerp(mapBlack.rgb, mapWhite.rgb, luma(c.rgb));
+    return c;
+}
+@end
+
+@effect Tritone
+@id gese.cc.tritone
+@category Color Correction
+@param color hiColor "Highlights" 1 1 1 1
+@param color midColor "Midtones" 0.72 0.33 0 1
+@param color shColor "Shadows" 0 0 0 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    c.rgb = l < 0.5 ? lerp(shColor.rgb, midColor.rgb, l * 2.0) : lerp(midColor.rgb, hiColor.rgb, l * 2.0 - 1.0);
+    return c;
+}
+@end
+
+@effect Black & White
+@id gese.cc.bw
+@category Color Correction
+@desc Black and white with per-color brightness (like Photoshop).
+@param float wR "Reds" 40 -200 300 %
+@param float wY "Yellows" 60 -200 300 %
+@param float wG "Greens" 40 -200 300 %
+@param float wC "Cyans" 60 -200 300 %
+@param float wB "Blues" 20 -200 300 %
+@param float wM "Magentas" 80 -200 300 %
+@param bool tintOn "Tint" 0
+@param color tintCol "Tint Color" 0.88 0.78 0.6 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 hsv = rgb2hsv(saturate(c.rgb));
+    float w[7] = {wR, wY, wG, wC, wB, wM, wR};
+    float h6 = hsv.x * 6.0;
+    int i = min((int)h6, 5);
+    float wt = lerp(w[i], w[i + 1], h6 - i) / 100.0;
+    float g = luma(c.rgb) * (1.0 + (wt - 0.5) * hsv.y * 1.6);
+    g = saturate(g);
+    c.rgb = tintOn ? blendOverlay(float3(g, g, g), tintCol.rgb) : float3(g, g, g);
+    return c;
+}
+@end
+
+@effect Channel Mixer
+@id gese.cc.channelmixer
+@category Color Correction
+@param float rr "Red-Red" 100 -200 200 %
+@param float rg "Red-Green" 0 -200 200 %
+@param float rb "Red-Blue" 0 -200 200 %
+@param float gr "Green-Red" 0 -200 200 %
+@param float gg "Green-Green" 100 -200 200 %
+@param float gb "Green-Blue" 0 -200 200 %
+@param float br "Blue-Red" 0 -200 200 %
+@param float bg "Blue-Green" 0 -200 200 %
+@param float bb "Blue-Blue" 100 -200 200 %
+@param bool mono "Monochrome" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 o;
+    o.r = dot(c.rgb, float3(rr, rg, rb) / 100.0);
+    o.g = dot(c.rgb, float3(gr, gg, gb) / 100.0);
+    o.b = dot(c.rgb, float3(br, bg, bb) / 100.0);
+    if (mono) o = o.rrr;
+    c.rgb = o;
+    return c;
+}
+@end
+
+@effect Invert
+@id gese.cc.invert
+@category Color Correction
+@param choice chan "Channel" 0 "RGB|Red|Green|Blue|Alpha|Luminance|Hue"
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    if (chan == 0) c.rgb = 1.0 - c.rgb;
+    else if (chan == 1) c.r = 1.0 - c.r;
+    else if (chan == 2) c.g = 1.0 - c.g;
+    else if (chan == 3) c.b = 1.0 - c.b;
+    else if (chan == 4) c.a = 1.0 - c.a;
+    else { float3 h = rgb2hsv(saturate(c.rgb)); if (chan == 5) h.z = 1.0 - h.z; else h.x = frac(h.x + 0.5); c.rgb = hsv2rgb(h); }
+    return c;
+}
+@end
+
+@effect Photo Filter
+@id gese.cc.photofilter
+@category Color Correction
+@param color filterColor "Color" 0.93 0.54 0.05 1
+@param float density "Density" 25 0 100 %
+@param bool preserveL "Preserve Luminosity" 1
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float3 f = c.rgb * filterColor.rgb;
+    c.rgb = lerp(c.rgb, f, density / 100.0);
+    if (preserveL) c.rgb *= l / max(luma(c.rgb), 1e-4);
+    return c;
+}
+@end
+
+@effect Shadow/Highlight
+@id gese.cc.shadowhighlight
+@category Color Correction
+@param float shadowAmt "Shadow Amount" 35 0 100 %
+@param float highAmt "Highlight Amount" 0 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float s = shadowAmt / 100.0 * (1.0 - smoothstep(0.0, 0.6, l));
+    float h = highAmt / 100.0 * smoothstep(0.4, 1.0, l);
+    c.rgb = lerp(c.rgb, sqrt(max(c.rgb, 0.0)), s);
+    c.rgb = lerp(c.rgb, c.rgb * c.rgb, h);
+    return c;
+}
+@end
+
+@effect Change Color
+@id gese.cc.changecolor
+@category Color Correction
+@desc Shifts hue / saturation / lightness of one color range.
+@param color target "Color to Change" 0.9 0.2 0.1 1
+@param float tolerance "Matching Tolerance" 15 0 100 %
+@param float softness "Matching Softness" 10 0 100 %
+@param angle hueT "Hue Transform" 120
+@param float satT "Saturation Transform" 0 -100 100
+@param float lightT "Lightness Transform" 0 -100 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 a = rgb2hsv(saturate(c.rgb)), b = rgb2hsv(target.rgb);
+    float dh = abs(a.x - b.x); dh = min(dh, 1.0 - dh);
+    float d = dh * 2.0 + abs(a.y - b.y) * 0.5;
+    float m = 1.0 - smoothstep(tolerance / 100.0, tolerance / 100.0 + softness / 100.0 + 1e-3, d);
+    a.x = frac(a.x + hueT / 360.0 * m);
+    a.y = saturate(a.y * (1.0 + satT / 100.0 * m));
+    a.z = saturate(a.z * (1.0 + lightT / 100.0 * m));
+    c.rgb = hsv2rgb(a);
+    return c;
+}
+@end
+
+@effect Change to Color
+@id gese.cc.changeto
+@category Color Correction
+@param color fromColor "From" 0.1 0.6 0.2 1
+@param color toColor "To" 0.72 0.33 0 1
+@param float tolerance "Tolerance" 20 0 100 %
+@param float softness "Softness" 15 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 a = rgb2hsv(saturate(c.rgb)), f = rgb2hsv(fromColor.rgb), t = rgb2hsv(toColor.rgb);
+    float dh = abs(a.x - f.x); dh = min(dh, 1.0 - dh);
+    float m = 1.0 - smoothstep(tolerance / 100.0 * 0.5, (tolerance + softness) / 100.0 * 0.5 + 1e-3, dh) ;
+    m *= smoothstep(0.05, 0.15, a.y);
+    float3 o = hsv2rgb(float3(t.x, a.y * (t.y / max(f.y, 0.05)), a.z * (t.z / max(f.z, 0.05))));
+    c.rgb = lerp(c.rgb, saturate(o), m);
+    return c;
+}
+@end
+
+@effect Leave Color
+@id gese.cc.leavecolor
+@category Color Correction
+@desc Desaturates everything except one color (Sin City look).
+@param color keep "Color to Leave" 0.85 0.1 0.1 1
+@param float tolerance "Tolerance" 12 0 100 %
+@param float softness "Edge Softness" 10 0 100 %
+@param float decolor "Amount to Decolor" 100 0 100 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 a = rgb2hsv(saturate(c.rgb)), k = rgb2hsv(keep.rgb);
+    float dh = abs(a.x - k.x); dh = min(dh, 1.0 - dh);
+    float m = 1.0 - smoothstep(tolerance / 200.0, (tolerance + softness) / 200.0 + 1e-3, dh);
+    m *= smoothstep(0.08, 0.2, a.y);
+    float l = luma(c.rgb);
+    c.rgb = lerp(c.rgb, float3(l, l, l), (1.0 - m) * decolor / 100.0);
+    return c;
+}
+@end
+
+@effect Film Look
+@id gese.cc.filmlook
+@category Color Correction
+@desc Ready-made grading looks.
+@param choice look "Look" 0 "Teal & Orange|Bleach Bypass|Cross Process|Vintage Fade|Cold Steel|Warm Sunset|Matrix Green|Sepia Print|Kodak Gold|Fuji Classic"
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float3 x = c.rgb;
+    float l = luma(x);
+    if (look == 0) { x = lerp(x, x * float3(0.8, 1.0, 1.1), 1.0 - l); x = lerp(x, x * float3(1.15, 1.0, 0.85), l); x = lerp(float3(l, l, l), x, 1.15); }
+    else if (look == 1) { float3 g = float3(l, l, l); x = lerp(x, blendOverlay(x, g), 0.8); x = lerp(g, x, 0.55); }
+    else if (look == 2) { x = float3(smoothstep(0.05, 0.95, x.r), x.g * 1.05, x.b * 0.75 + 0.12); }
+    else if (look == 3) { x = x * 0.82 + 0.1; x *= float3(1.05, 1.0, 0.9); x = lerp(float3(l, l, l), x, 0.8); }
+    else if (look == 4) { x = lerp(float3(l, l, l), x, 0.4) * float3(0.9, 1.0, 1.12); x = (x - 0.5) * 1.15 + 0.5; }
+    else if (look == 5) { x *= float3(1.18, 0.98, 0.78); x += float3(0.04, 0.01, 0.0); }
+    else if (look == 6) { x = float3(x.r * 0.7, x.g * 1.12, x.b * 0.7); x = (x - 0.5) * 1.1 + 0.5; }
+    else if (look == 7) { x = float3(dot(x, float3(0.393, 0.769, 0.189)), dot(x, float3(0.349, 0.686, 0.168)), dot(x, float3(0.272, 0.534, 0.131))); }
+    else if (look == 8) { x = pow(max(x, 0.0), float3(0.92, 0.97, 1.08)) * float3(1.06, 1.02, 0.94); x = lerp(float3(l, l, l), x, 1.1); }
+    else { x = pow(max(x, 0.0), float3(1.02, 0.96, 0.98)) * float3(0.98, 1.03, 1.02); x = lerp(float3(l, l, l), x, 0.95); }
+    c.rgb = x;
+    return c;
+}
+@end
+
+@effect Colorama
+@id gese.cc.colorama
+@category Color Correction
+@desc Maps brightness onto a cycling color palette.
+@speed
+@param angle phaseShift "Phase Shift" 0
+@param float cycles "Cycle Repetitions" 1 0.1 20
+@param float satV "Saturation" 100 0 100 %
+@param bool keepLum "Modify Hue Only" 0
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float ph = l * cycles + phaseShift / 360.0 + PHASE * 0.25;
+    if (keepLum) { float3 h = rgb2hsv(saturate(c.rgb)); h.x = frac(ph); c.rgb = hsv2rgb(h); }
+    else c.rgb = hsv2rgb(float3(frac(ph), satV / 100.0, 1.0));
+    return c;
+}
+@end
+
+@effect Gradient Map
+@id gese.cc.gradientmap
+@category Color Correction
+@param color shColor "Shadows" 0.153 0.071 0 1
+@param color midColor "Midtones" 0.72 0.33 0 1
+@param color hiColor "Highlights" 1 0.95 0.85 1
+@param float midpoint "Midpoint" 50 5 95 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb), m = midpoint / 100.0;
+    c.rgb = l < m ? lerp(shColor.rgb, midColor.rgb, l / m) : lerp(midColor.rgb, hiColor.rgb, (l - m) / (1.0 - m));
+    return c;
+}
+@end
+
+@effect Split Toning
+@id gese.cc.splittone
+@category Color Correction
+@param angle hiHue "Highlight Hue" 40
+@param float hiSat "Highlight Saturation" 30 0 100 %
+@param angle shHue "Shadow Hue" 200
+@param float shSat "Shadow Saturation" 30 0 100 %
+@param float balance "Balance" 0 -100 100
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float l = luma(c.rgb);
+    float b = 0.5 + balance / 200.0;
+    float3 hc = hsv2rgb(float3(frac(hiHue / 360.0), 1, 1)), sc = hsv2rgb(float3(frac(shHue / 360.0), 1, 1));
+    float wh = smoothstep(b - 0.25, b + 0.25, l);
+    c.rgb = lerp(c.rgb, blendSoft(c.rgb, sc), (1.0 - wh) * shSat / 100.0);
+    c.rgb = lerp(c.rgb, blendSoft(c.rgb, hc), wh * hiSat / 100.0);
+    return c;
+}
+@end
+
+@effect Broadcast Safe
+@id gese.cc.broadcast
+@category Color Correction
+@desc Limits luma and saturation to legal broadcast levels.
+@param float maxLuma "Max Luma" 100 50 110 IRE
+@param float maxSat "Max Saturation" 100 0 120 %
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float lim = maxLuma / 100.0;
+    float l = luma(c.rgb);
+    if (l > lim) c.rgb *= lim / l;
+    float s = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    float ms = maxSat / 100.0 * 0.85;
+    if (s > ms) { l = luma(c.rgb); c.rgb = lerp(float3(l, l, l), c.rgb, ms / s); }
+    c.rgb = clamp(c.rgb, 16.0 / 255.0, 235.0 / 255.0 * max(lim, 1.0));
+    return c;
+}
+@end
+
+@effect Auto Contrast
+@id gese.cc.autocontrast
+@category Color Correction
+@desc Gentle local contrast boost (clarity).
+@param float clarity "Clarity" 40 0 100 %
+@param float radius "Radius" 30 1 200 px
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float4 acc = 0;
+    const int N = 24;
+    [loop] for (int i = 0; i < N; i++) {
+        float a = i * 2.39996323, r = sqrt((i + 0.5) / N) * PX(radius);
+        acc += SRCP(uv + float2(cos(a), sin(a)) * r * TEXEL);
+    }
+    float bl = luma(unpremul(acc / N).rgb);
+    float l = luma(c.rgb);
+    float mask = 1.0 - abs(l * 2.0 - 1.0);
+    c.rgb += (l - bl) * clarity / 100.0 * 1.5 * mask;
+    return c;
+}
+@end

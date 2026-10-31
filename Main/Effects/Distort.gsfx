@@ -1,0 +1,421 @@
+// GeSe built-in effects: Distort (Intensity scales the distortion, up to 200%)
+
+@effect Twirl
+@id gese.dist.twirl
+@category Distort
+@mix manual
+@param angle twirlAngle "Angle" 180
+@param float twirlRadius "Twirl Radius" 40 1 200 %
+@param point center "Twirl Center" 0.5 0.5
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float R = twirlRadius / 100.0 * min(RES.x, RES.y);
+    float t = saturate(1.0 - length(p) / R);
+    float a = radians(twirlAngle) * t * t * INTENSITY;
+    return SRCE(center + rot2(p, a) / RES, edge);
+}
+@end
+
+@effect Bulge
+@id gese.dist.bulge
+@category Distort
+@desc Bulge out (positive) or pinch in (negative).
+@mix manual
+@param point center "Bulge Center" 0.5 0.5
+@param float radX "Horizontal Radius" 35 1 200 %
+@param float radY "Vertical Radius" 35 1 200 %
+@param float bulgeH "Bulge Height" 1 -4 4
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float2 r = float2(radX, radY) / 100.0 * min(RES.x, RES.y) * 0.5;
+    float d = length(p / r);
+    if (d >= 1.0) return SRCE(uv, edge);
+    float k = 1.0 - d * d;
+    float s = 1.0 - bulgeH * 0.5 * k * k * INTENSITY;
+    return SRCE(center + p * max(s, 0.05) / RES, edge);
+}
+@end
+
+@effect Ripple
+@id gese.dist.ripple
+@category Distort
+@mix manual
+@speed
+@param point center "Center" 0.5 0.5
+@param float rippleRadius "Radius" 600 1 5000 px
+@param float wavelength "Wavelength" 40 2 1000 px
+@param float amplitude "Amplitude" 10 0 500 px
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float d = length(p);
+    float fall = saturate(1.0 - d / max(PX(rippleRadius), 1.0));
+    float w = sin((d / max(PX(wavelength), 1.0) - PHASE) * TAU) * PX(amplitude) * fall * INTENSITY;
+    float2 n = d > 0.0 ? p / d : float2(0, 0);
+    return SRCE(uv + n * w * TEXEL, edge);
+}
+@end
+
+@effect Wave Warp
+@id gese.dist.wavewarp
+@category Distort
+@mix manual
+@speed
+@param choice waveType "Wave Type" 0 "Sine|Triangle|Square|Sawtooth|Bounce|Smooth Random"
+@param float waveH "Wave Height" 10 0 1000 px
+@param float waveW "Wave Width" 40 1 2000 px
+@param angle direction "Direction" 90
+@param float waveSpeed "Wave Speed" 1 -20 20
+@param angle wavePhase "Phase" 0
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float a = radians(direction);
+    float2 d = float2(sin(a), -cos(a));
+    float2 perp = float2(d.y, -d.x);
+    float x = dot(uv * RES, perp) / max(PX(waveW), 1.0) + wavePhase / 360.0 - PHASE * waveSpeed;
+    float w = wave(x, waveType) * PX(waveH) * INTENSITY;
+    return SRCE(uv + d * w * TEXEL, edge);
+}
+@end
+
+@effect Turbulent Displace
+@id gese.dist.turbulent
+@category Distort
+@mix manual
+@speed
+@param float amount "Amount" 30 0 1000 px
+@param float tSize "Size" 100 2 2000 px
+@param float complexity "Complexity" 3 1 8
+@param float evoSpeed "Evolution Speed" 0.5 0 10
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(tSize), 1.0);
+    float t = PHASE * evoSpeed;
+    int oct = (int)clamp(complexity, 1.0, 8.0);
+    float2 n = float2(fbm3(float3(p, t), oct), fbm3(float3(p + 31.7, t + 9.1), oct)) - 0.5;
+    return SRCE(uv + n * 2.0 * PX(amount) * INTENSITY * TEXEL, edge);
+}
+@end
+
+@effect Polar Coordinates
+@id gese.dist.polar
+@category Distort
+@mix manual
+@param choice conv "Type of Conversion" 0 "Rect to Polar|Polar to Rect"
+@code
+float4 effect(float2 uv) {
+    float2 q;
+    if (conv == 0) {
+        float2 c = uv - 0.5;
+        q = float2(frac(atan2(c.x, -c.y) / TAU + 0.5), 1.0 - length(c) * 2.0);
+    } else {
+        float a = (uv.x - 0.5) * TAU, r = (1.0 - uv.y) * 0.5;
+        q = 0.5 + float2(sin(a), -cos(a)) * r;
+    }
+    return SRC(lerp(uv, q, saturate(INTENSITY)));
+}
+@end
+
+@effect Spherize
+@id gese.dist.spherize
+@category Distort
+@mix manual
+@param float sRadius "Radius" 60 1 200 %
+@param point center "Center of Sphere" 0.5 0.5
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float R = sRadius / 100.0 * min(RES.x, RES.y) * 0.5;
+    float d = length(p) / R;
+    if (d >= 1.0) return SRCE(uv, edge);
+    float k = d > 1e-4 ? (asin(d) / (PI * 0.5)) / d : 1.0;
+    k = lerp(1.0, k, saturate(INTENSITY));
+    return SRCE(center + p * k / RES, edge);
+}
+@end
+
+@effect Mirror
+@id gese.dist.mirror
+@category Distort
+@mix manual
+@param point reflCenter "Reflection Center" 0.5 0.5
+@param angle reflAngle "Reflection Angle" 0
+@code
+float4 effect(float2 uv) {
+    float a = radians(reflAngle);
+    float2 n = float2(cos(a), sin(a));
+    float2 p = (uv - reflCenter) * RES;
+    float s = dot(p, n);
+    if (s > 0.0 && INTENSITY > 0.5) p -= 2.0 * s * n;
+    return SRC(reflCenter + p / RES);
+}
+@end
+
+@effect Kaleidoscope
+@id gese.dist.kaleido
+@category Distort
+@mix manual
+@param float segments "Segments" 6 1 64
+@param angle rotationA "Rotation" 0
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float r = length(p);
+    float a = atan2(p.y, p.x) - radians(rotationA);
+    float seg = TAU / max(round(segments), 1.0);
+    a = fmod(a + 1000.0 * seg, seg);
+    if (a > seg * 0.5) a = seg - a;
+    a += radians(rotationA);
+    float2 q = center + float2(cos(a), sin(a)) * r / RES;
+    return SRCE(lerp(uv, q, saturate(INTENSITY)), edge);
+}
+@end
+
+@effect Offset
+@id gese.dist.offset
+@category Distort
+@desc Shifts the picture with wrap-around.
+@mix manual
+@param point shiftTo "Shift Center To" 0.5 0.5
+@code
+float4 effect(float2 uv) { return SRCE(uv - (shiftTo - 0.5) * INTENSITY, 1); }
+@end
+
+@effect Lens Distortion
+@id gese.dist.lens
+@category Distort
+@desc Barrel (+) or pincushion (-) lens distortion.
+@mix manual
+@param float curvature "Curvature" 30 -100 100
+@param float decX "Horizontal Decentering" 0 -100 100
+@param float decY "Vertical Decentering" 0 -100 100
+@param float fillV "Fill (Zoom)" 0 0 100 %
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 dc = float2(decX, decY) / 200.0;
+    float2 p = (uv - 0.5 - dc) * float2(ASPECT, 1.0);
+    float k = curvature / 100.0 * INTENSITY;
+    float r2 = dot(p, p);
+    p *= (1.0 - k * r2 * 0.8) / (1.0 + fillV / 100.0);
+    return SRCE(p / float2(ASPECT, 1.0) + 0.5 + dc, edge);
+}
+@end
+
+@effect Fisheye
+@id gese.dist.fisheye
+@category Distort
+@mix manual
+@param float fishStrength "Field of View" 60 0 100 %
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * float2(ASPECT, 1.0) * 2.0;
+    float r = length(p);
+    float fov = radians(lerp(1.0, 170.0, saturate(fishStrength / 100.0 * INTENSITY)));
+    float nr = tan(min(r * fov * 0.5, 1.55)) / tan(fov * 0.5);
+    float2 q = r > 1e-5 ? p / r * nr : p;
+    return SRCE(center + q / float2(ASPECT, 1.0) * 0.5, edge);
+}
+@end
+
+@effect Vortex
+@id gese.dist.vortex
+@category Distort
+@desc Animated swirl that twists back and forth.
+@mix manual
+@speed
+@param angle strength "Strength" 120
+@param float vRadius "Radius" 50 1 200 %
+@param point center "Center" 0.5 0.5
+@param float freq "Frequency" 0.5 0 10 Hz
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    float R = vRadius / 100.0 * min(RES.x, RES.y);
+    float t = saturate(1.0 - length(p) / R);
+    float osc = freq > 0.0 ? sin(PHASE * freq * TAU) : 1.0;
+    return SRCE(center + rot2(p, radians(strength) * t * t * osc * INTENSITY) / RES, edge);
+}
+@end
+
+@effect Glass Refraction
+@id gese.dist.glass
+@category Distort
+@mix manual
+@speed
+@param float refrAmount "Refraction" 30 0 500 px
+@param float cellSize "Scale" 150 5 2000 px
+@param float evoSpeed "Flow Speed" 0.3 0 5
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(cellSize), 1.0);
+    float t = PHASE * evoSpeed;
+    float e = 0.05;
+    float n0 = fbm3(float3(p, t), 4), nx = fbm3(float3(p + float2(e, 0), t), 4), ny = fbm3(float3(p + float2(0, e), t), 4);
+    float2 g = float2(nx - n0, ny - n0) / e;
+    return SRCE(uv + g * PX(refrAmount) * 0.25 * INTENSITY * TEXEL, edge);
+}
+@end
+
+@effect Heat Haze
+@id gese.dist.heathaze
+@category Distort
+@mix manual
+@speed
+@param float amount "Amount" 6 0 100 px
+@param float hScale "Scale" 40 2 500 px
+@param float riseSpeed "Rise Speed" 1.5 0 20
+@param choice edge "Edge Mode" 3 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(hScale), 1.0);
+    float n = vnoise(float2(p.x * 1.5, p.y + PHASE * riseSpeed)) - 0.5;
+    float n2 = vnoise(float2(p.x * 3.0 + 7.0, p.y * 2.0 + PHASE * riseSpeed * 1.7)) - 0.5;
+    float2 o = float2(n + n2 * 0.5, (n2 - n) * 0.3) * PX(amount) * INTENSITY;
+    return SRCE(uv + o * TEXEL, edge);
+}
+@end
+
+@effect Shear
+@id gese.dist.shear
+@category Distort
+@mix manual
+@param float skewX "Horizontal Skew" 20 -200 200 %
+@param float skewY "Vertical Skew" 0 -200 200 %
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 p = (uv - center) * RES;
+    p.x -= p.y * skewX / 100.0 * INTENSITY;
+    p.y -= p.x * skewY / 100.0 * INTENSITY;
+    return SRCE(center + p / RES, edge);
+}
+@end
+
+@effect Bend
+@id gese.dist.bend
+@category Distort
+@mix manual
+@param float bendAmt "Bend" 30 -200 200
+@param choice axis "Axis" 0 "Horizontal|Vertical"
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float2 q = uv;
+    float k = bendAmt / 100.0 * INTENSITY;
+    if (axis == 0) { float x = uv.x - 0.5; q.y -= k * (x * x * 4.0 - 0.33) * 0.5; }
+    else { float y = uv.y - 0.5; q.x -= k * (y * y * 4.0 - 0.33) * 0.5; }
+    return SRCE(q, edge);
+}
+@end
+
+@effect Liquify
+@id gese.dist.liquify
+@category Distort
+@desc Flowing liquid warp (curl noise).
+@mix manual
+@speed
+@param float amount "Amount" 40 0 1000 px
+@param float lScale "Scale" 250 5 3000 px
+@param float flow "Flow Speed" 0.4 0 10
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float pot(float2 p, float t) { return fbm3(float3(p, t), 4); }
+float4 effect(float2 uv) {
+    float2 p = uv * RES / max(PX(lScale), 1.0);
+    float t = PHASE * flow, e = 0.03;
+    float a = pot(p + float2(0, e), t) - pot(p - float2(0, e), t);
+    float b = pot(p + float2(e, 0), t) - pot(p - float2(e, 0), t);
+    float2 curl = float2(a, -b) / (2.0 * e);
+    return SRCE(uv + curl * PX(amount) * 0.2 * INTENSITY * TEXEL, edge);
+}
+@end
+
+@effect Corner Pin
+@id gese.dist.cornerpin
+@category Distort
+@desc Pins the four corners anywhere (perspective screen replacement).
+@mix manual
+@param point ul "Upper Left" 0.1 0.1
+@param point ur "Upper Right" 0.9 0.05
+@param point lr "Lower Right" 0.95 0.95
+@param point ll "Lower Left" 0.05 0.9
+@code
+float cross2(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
+float2 invBilinear(float2 p, float2 a, float2 b, float2 c, float2 d) {
+    float2 e = b - a, f = d - a, g = a - b + c - d, h = p - a;
+    float k2 = cross2(g, f), k1 = cross2(e, f) + cross2(h, g), k0 = cross2(h, e);
+    if (abs(k2) < 1e-4) {
+        float v = -k0 / k1;
+        float u = (h.x - f.x * v) / (e.x + g.x * v);
+        return float2(u, v);
+    }
+    float w = k1 * k1 - 4.0 * k0 * k2;
+    if (w < 0.0) return float2(-1, -1);
+    w = sqrt(w);
+    float ik2 = 0.5 / k2;
+    float v = (-k1 - w) * ik2;
+    float u = (h.x - f.x * v) / (e.x + g.x * v);
+    if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) { v = (-k1 + w) * ik2; u = (h.x - f.x * v) / (e.x + g.x * v); }
+    return float2(u, v);
+}
+float4 effect(float2 uv) {
+    float k = saturate(INTENSITY);
+    float2 a = lerp(float2(0, 0), ul, k) * RES, b = lerp(float2(1, 0), ur, k) * RES;
+    float2 c = lerp(float2(1, 1), lr, k) * RES, d = lerp(float2(0, 1), ll, k) * RES;
+    float2 st = invBilinear(uv * RES, a, b, c, d);
+    return SRC(st);
+}
+@end
+
+@effect Displacement Map
+@id gese.dist.displace
+@category Distort
+@desc Displaces the layer by its own channel values.
+@mix manual
+@param choice chan "Use" 0 "Luminance|Red|Green|Blue|Alpha"
+@param float amountX "Max Horizontal" 20 -1000 1000 px
+@param float amountY "Max Vertical" 20 -1000 1000 px
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float4 c = SRC(uv);
+    float v = chan == 0 ? luma(c.rgb) : chan == 1 ? c.r : chan == 2 ? c.g : chan == 3 ? c.b : c.a;
+    float2 o = (v - 0.5) * 2.0 * float2(PX(amountX), PX(amountY)) * INTENSITY;
+    return SRCE(uv + o * TEXEL, edge);
+}
+@end
+
+@effect Pixel Stretch
+@id gese.dist.pixelstretch
+@category Distort
+@desc Smears pixels from a line to the edge (popular in edits).
+@mix manual
+@param point origin "Stretch From" 0.5 0.5
+@param choice sdir "Direction" 0 "Right|Left|Down|Up"
+@code
+float4 effect(float2 uv) {
+    float2 q = uv;
+    float k = saturate(INTENSITY);
+    if (sdir == 0 && uv.x > origin.x) q.x = lerp(uv.x, origin.x, k);
+    if (sdir == 1 && uv.x < origin.x) q.x = lerp(uv.x, origin.x, k);
+    if (sdir == 2 && uv.y > origin.y) q.y = lerp(uv.y, origin.y, k);
+    if (sdir == 3 && uv.y < origin.y) q.y = lerp(uv.y, origin.y, k);
+    return SRC(q);
+}
+@end

@@ -1,0 +1,46 @@
+{
+    "name":  "Infinite Mirror Scroll",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900040,
+                        "def":  "gese.motion.tile",
+                        "name":  "Tile",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "tileW":  {
+                                                     "v":  [
+                                                               50
+                                                           ]
+                                                 },
+                                       "tileH":  {
+                                                     "v":  [
+                                                               50
+                                                           ]
+                                                 },
+                                       "edge":  {
+                                                    "v":  [
+                                                              2
+                                                          ],
+                                                    "step":  true
+                                                },
+                                       "scrollX":  {
+                                                       "v":  [
+                                                                 0.25
+                                                             ]
+                                                   }
+                                   }
+                    }
+                ]
+}

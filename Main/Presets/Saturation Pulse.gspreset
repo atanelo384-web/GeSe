@@ -1,0 +1,52 @@
+{
+    "name":  "Saturation Pulse",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900140,
+                        "def":  "gese.filter.saturation",
+                        "name":  "Saturation",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    0
+                                                ],
+                                          "k":  [
+                                                    {
+                                                        "t":  0,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  0.25,
+                                                        "v":  [
+                                                                  150
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    },
+                                                    {
+                                                        "t":  0.6,
+                                                        "v":  [
+                                                                  0
+                                                              ],
+                                                        "i":  1,
+                                                        "o":  1
+                                                    }
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+
+                                   }
+                    }
+                ]
+}

@@ -1,0 +1,50 @@
+{
+    "name":  "Old Film Reel",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900110,
+                        "def":  "gese.nz.oldfilm",
+                        "name":  "Old Film",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+
+                                   }
+                    },
+                    {
+                        "id":  900110,
+                        "def":  "gese.nz.grain",
+                        "name":  "Film Grain",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "amount":  {
+                                                      "v":  [
+                                                                35
+                                                            ]
+                                                  }
+                                   }
+                    }
+                ]
+}

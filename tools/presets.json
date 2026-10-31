@@ -1,0 +1,53 @@
+[
+ {"name": "Velocity Shake", "effects": [
+   {"def": "gese.motion.shake", "name": "Shake", "params": {"amplitude": {"v": [35]}, "freq": {"v": [8]}, "rotAmt": {"v": [2.5]}, "mblur": {"v": [70]}, "zoomComp": {"v": [8]}}}]},
+ {"name": "Smooth Swing", "effects": [
+   {"def": "gese.motion.swing", "name": "Swing", "params": {"swingAngle": {"v": [10]}, "freq": {"v": [0.8]}, "mblur": {"v": [50]}, "zoomComp": {"v": [12]}}}]},
+ {"name": "Oscillation + Mirror Edges", "effects": [
+   {"def": "gese.motion.oscillation", "name": "Oscillation", "params": {"amplitude": {"v": [90]}, "freq": {"v": [1.5]}, "mblur": {"v": [60]}, "edge": {"v": [2], "step": true}}}]},
+ {"name": "Infinite Mirror Scroll", "effects": [
+   {"def": "gese.motion.tile", "name": "Tile", "params": {"tileW": {"v": [50]}, "tileH": {"v": [50]}, "edge": {"v": [2], "step": true}, "scrollX": {"v": [0.25]}}}]},
+ {"name": "Beat Zoom 120 BPM", "effects": [
+   {"def": "gese.motion.zoompulse", "name": "Zoom Pulse", "params": {"bpm": {"v": [120]}, "zoomAmt": {"v": [12]}, "sharp": {"v": [7]}, "mblur": {"v": [40]}}}]},
+ {"name": "Glitch Hit", "effects": [
+   {"def": "gese.gl.digital", "name": "Digital Glitch", "intensity": {"v": [100], "k": [{"t": 0, "v": [100], "i": 0, "o": 0}, {"t": 0.35, "v": [0], "i": 1, "o": 1}]}},
+   {"def": "gese.gl.rgbsplit", "name": "RGB Split", "params": {"amount": {"v": [25]}}, "intensity": {"v": [100], "k": [{"t": 0, "v": [100], "i": 0, "o": 0}, {"t": 0.35, "v": [0], "i": 1, "o": 1}]}}]},
+ {"name": "Flash In", "effects": [
+   {"def": "gese.lt.flash", "name": "Flash", "params": {"flashMode": {"v": [0], "step": true}}, "intensity": {"v": [100], "k": [{"t": 0, "v": [100], "i": 0, "o": 1}, {"t": 0.25, "v": [0], "i": 1, "o": 0}]}}]},
+ {"name": "VHS Tape", "effects": [
+   {"def": "gese.gl.vhs", "name": "VHS"},
+   {"def": "gese.nz.grain", "name": "Film Grain", "params": {"amount": {"v": [30]}}},
+   {"def": "gese.lt.vignette", "name": "Vignette", "params": {"amount": {"v": [40]}}}]},
+ {"name": "Cinematic Grade", "effects": [
+   {"def": "gese.filter.cinematic", "name": "Cinematic"},
+   {"def": "gese.lt.vignette", "name": "Vignette", "params": {"amount": {"v": [35]}}},
+   {"def": "gese.nz.grain", "name": "Film Grain", "params": {"amount": {"v": [12]}}}]},
+ {"name": "Dreamy Glow", "effects": [
+   {"def": "gese.filter.dreamy", "name": "Dreamy"},
+   {"def": "gese.lt.bloom", "name": "Bloom", "params": {"threshold": {"v": [65]}, "strength": {"v": [0.8]}}}]},
+ {"name": "Old Film Reel", "effects": [
+   {"def": "gese.nz.oldfilm", "name": "Old Film"},
+   {"def": "gese.nz.grain", "name": "Film Grain", "params": {"amount": {"v": [35]}}}]},
+ {"name": "Mono Fade to Color", "effects": [
+   {"def": "gese.filter.mono", "name": "Mono", "intensity": {"v": [100], "k": [{"t": 0, "v": [100], "i": 1, "o": 1}, {"t": 1.0, "v": [0], "i": 1, "o": 1}]}}]},
+ {"name": "Exposure Punch", "effects": [
+   {"def": "gese.filter.exposure", "name": "Exposure Filter", "params": {"stops": {"v": [1.5]}}, "intensity": {"v": [0], "k": [{"t": 0, "v": [0], "i": 1, "o": 1}, {"t": 0.12, "v": [100], "i": 1, "o": 1}, {"t": 0.45, "v": [0], "i": 1, "o": 1}]}}]},
+ {"name": "Saturation Pulse", "effects": [
+   {"def": "gese.filter.saturation", "name": "Saturation", "intensity": {"v": [0], "k": [{"t": 0, "v": [0], "i": 1, "o": 1}, {"t": 0.25, "v": [150], "i": 1, "o": 1}, {"t": 0.6, "v": [0], "i": 1, "o": 1}]}}]},
+ {"name": "Whip Pan Cut", "effects": [
+   {"def": "gese.tr.whip", "name": "Whip Pan", "params": {"tmode": {"v": [3], "step": true}, "tdur": {"v": [0.25]}}}]},
+ {"name": "Zoom In Transition", "effects": [
+   {"def": "gese.tr.zoom", "name": "Zoom Transition", "params": {"tmode": {"v": [1], "step": true}, "tdur": {"v": [0.35]}}}]},
+ {"name": "Impact Hit", "effects": [
+   {"def": "gese.tr.impact", "name": "Impact Shake", "params": {"tmode": {"v": [1], "step": true}}},
+   {"def": "gese.tr.chroma", "name": "Chromatic Transition", "params": {"tmode": {"v": [1], "step": true}, "tdur": {"v": [0.25]}}}]},
+ {"name": "Neon Outline", "effects": [
+   {"def": "gese.sty.neon", "name": "Neon Edges"},
+   {"def": "gese.sty.glow", "name": "Glow", "params": {"threshold": {"v": [30]}, "radius": {"v": [30]}}}]},
+ {"name": "Teal & Orange Pro", "effects": [
+   {"def": "gese.cc.filmlook", "name": "Film Look"},
+   {"def": "gese.filter.contrast", "name": "Contrast", "params": {"amount": {"v": [15]}}},
+   {"def": "gese.lt.vignette", "name": "Vignette", "params": {"amount": {"v": [30]}}}]},
+ {"name": "Handheld Camera", "effects": [
+   {"def": "gese.motion.wiggle", "name": "Wiggle", "params": {"amplitude": {"v": [18]}, "freq": {"v": [1.2]}, "rotAmt": {"v": [0.8]}}}]}
+]

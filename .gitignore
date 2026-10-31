@@ -1,0 +1,18 @@
+# build output
+/build/
+/dist/
+/test/out/
+
+# downloaded dependencies (tools/fetch_deps.ps1)
+/third_party/ffmpeg/
+/third_party/onnxruntime/bin/
+/third_party/onnxruntime/models/
+*.onnx
+*.nupkg
+
+# editors / OS
+.vs/
+.vscode/
+*.user
+Thumbs.db
+Desktop.ini

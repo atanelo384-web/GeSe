@@ -1,0 +1,36 @@
+{
+    "name":  "Zoom In Transition",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900160,
+                        "def":  "gese.tr.zoom",
+                        "name":  "Zoom Transition",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "tmode":  {
+                                                     "v":  [
+                                                               1
+                                                           ],
+                                                     "step":  true
+                                                 },
+                                       "tdur":  {
+                                                    "v":  [
+                                                              0.35
+                                                          ]
+                                                }
+                                   }
+                    }
+                ]
+}

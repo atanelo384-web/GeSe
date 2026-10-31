@@ -1,0 +1,391 @@
+// GeSe built-in effects: Motion
+// Every effect has Intensity; animated ones also have Speed. All parameters are keyframable.
+
+@effect Tile
+@id gese.motion.tile
+@category Motion
+@desc Motion Tile: repeats the layer. Edge Mode: Crop (cut), Normal (repeat), Mirror or Stretch. Scroll X/Y move the tiles endlessly (x Speed).
+@mix manual
+@speed
+@param point tileCenter "Tile Center" 0.5 0.5
+@param float tileW "Tile Width" 50 1 1000 %
+@param float tileH "Tile Height" 50 1 1000 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@param angle tilePhase "Phase" 0
+@param bool hShift "Horizontal Phase Shift" 0
+@param float scrollX "Scroll X" 0 -20 20 tiles/s
+@param float scrollY "Scroll Y" 0 -20 20 tiles/s
+@code
+float4 effect(float2 uv) {
+    float2 ts = lerp(float2(1, 1), float2(tileW, tileH) / 100.0, saturate(INTENSITY));
+    float2 p = (uv - tileCenter) / ts + 0.5;
+    p -= float2(scrollX, scrollY) * PHASE;
+    float ph = tilePhase / 360.0;
+    if (hShift) { float row = floor(p.y); p.x += ph * fmod(abs(row), 2.0); }
+    else        { float col = floor(p.x); p.y += ph * fmod(abs(col), 2.0); }
+    return SRCE(p, edge);
+}
+@end
+
+@effect Oscillation
+@id gese.motion.oscillation
+@category Motion
+@desc Moves the picture back and forth. Intensity scales the distance, Speed the tempo. Use Mirror edges to avoid empty borders.
+@mix manual
+@speed
+@param choice dir "Direction" 0 "Horizontal|Vertical|Circle|Figure 8|Custom Angle"
+@param angle oscAngle "Angle" 45
+@param float amplitude "Amplitude" 60 0 3000 px
+@param float freq "Frequency" 1 0.05 30 Hz
+@param choice waveType "Wave" 0 "Sine|Triangle|Square|Sawtooth|Bounce|Smooth Random"
+@param angle wavePhase "Phase" 0
+@param float mblur "Motion Blur" 0 0 100 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float2 oscOffset(float ph) {
+    float x = ph * freq + wavePhase / 360.0;
+    float w = wave(x, waveType);
+    float2 o;
+    if (dir == 0) o = float2(w, 0);
+    else if (dir == 1) o = float2(0, w);
+    else if (dir == 2) o = float2(wave(x, waveType), wave(x + 0.25, waveType));
+    else if (dir == 3) o = float2(wave(x, waveType), wave(x * 2.0, waveType) * 0.5);
+    else { float a = radians(oscAngle); o = float2(cos(a), sin(a)) * w; }
+    return o * PX(amplitude) * INTENSITY;
+}
+float4 effect(float2 uv) {
+    int n = mblur > 0.5 ? 14 : 1;
+    float shutter = mblur / 100.0 * max(SPEED, 0.01) / max(FPS, 1.0);
+    float4 acc = 0;
+    [loop] for (int i = 0; i < n; i++) {
+        float ph = PHASE - shutter * (n > 1 ? i / (float)(n - 1) : 0.0);
+        acc += SRCEP(uv - oscOffset(ph) * TEXEL, edge);
+    }
+    return unpremul(acc / n);
+}
+@end
+
+@effect Swing
+@id gese.motion.swing
+@category Motion
+@desc Pendulum swing: rotates back and forth around the pivot. Intensity scales the angle, Speed the tempo.
+@mix manual
+@speed
+@param float swingAngle "Max Angle" 12 0 180 °
+@param point pivot "Pivot" 0.5 0.5
+@param float freq "Frequency" 1 0.05 30 Hz
+@param choice waveType "Wave" 0 "Sine|Triangle|Square|Sawtooth|Bounce|Smooth Random"
+@param angle wavePhase "Phase" 0
+@param float zoomComp "Zoom" 0 0 200 %
+@param float mblur "Motion Blur" 0 0 100 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float2 swingUV(float2 uv, float ph) {
+    float a = radians(swingAngle) * wave(ph * freq + wavePhase / 360.0, waveType) * INTENSITY;
+    float2 p = (uv - pivot) * RES / (1.0 + zoomComp / 100.0);
+    return pivot + rot2(p, -a) / RES;
+}
+float4 effect(float2 uv) {
+    int n = mblur > 0.5 ? 14 : 1;
+    float shutter = mblur / 100.0 * max(SPEED, 0.01) / max(FPS, 1.0);
+    float4 acc = 0;
+    [loop] for (int i = 0; i < n; i++) {
+        float ph = PHASE - shutter * (n > 1 ? i / (float)(n - 1) : 0.0);
+        acc += SRCEP(swingUV(uv, ph), edge);
+    }
+    return unpremul(acc / n);
+}
+@end
+
+@effect Shake
+@id gese.motion.shake
+@category Motion
+@desc Camera shake with position, rotation and zoom jitter. Roughness adds finer detail.
+@mix manual
+@speed
+@param float amplitude "Amplitude" 25 0 1000 px
+@param float rotAmt "Rotation" 2 0 45 °
+@param float zoomAmt "Zoom Shake" 2 0 50 %
+@param float freq "Frequency" 6 0.1 60 Hz
+@param float rough "Roughness" 2 1 4
+@param float seedV "Random Seed" 0 0 100
+@param float zoomComp "Zoom" 5 0 200 %
+@param float mblur "Motion Blur" 40 0 100 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float jit(float t, float s) {
+    float v = 0, amp = 1, tot = 0;
+    int oct = (int)clamp(rough, 1.0, 4.0);
+    [loop] for (int k = 0; k < oct; k++) { v += snoise1(t * exp2(k) + s * 17.31 + k * 3.7) * amp; tot += amp; amp *= 0.5; }
+    return v / tot;
+}
+float2 shakeUV(float2 uv, float ph) {
+    float t = ph * freq;
+    float2 o = float2(jit(t, seedV + 1.0), jit(t, seedV + 2.0)) * PX(amplitude) * INTENSITY;
+    float r = radians(rotAmt) * jit(t, seedV + 3.0) * INTENSITY;
+    float z = (1.0 + zoomComp / 100.0) * (1.0 + zoomAmt / 100.0 * jit(t, seedV + 4.0) * INTENSITY);
+    float2 p = ((uv - 0.5) * RES - o) / z;
+    return 0.5 + rot2(p, -r) / RES;
+}
+float4 effect(float2 uv) {
+    int n = mblur > 0.5 ? 12 : 1;
+    float shutter = mblur / 100.0 * max(SPEED, 0.01) / max(FPS, 1.0);
+    float4 acc = 0;
+    [loop] for (int i = 0; i < n; i++) acc += SRCEP(shakeUV(uv, PHASE - shutter * (n > 1 ? i / (float)(n - 1) : 0.0)), edge);
+    return unpremul(acc / n);
+}
+@end
+
+@effect Wiggle
+@id gese.motion.wiggle
+@category Motion
+@desc Smooth random drift, like the wiggle() expression. Good for handheld camera feel.
+@mix manual
+@speed
+@param float amplitude "Amplitude" 30 0 1000 px
+@param float freq "Wiggles per Second" 1.5 0.05 20
+@param float rotAmt "Rotation" 1 0 45 °
+@param float seedV "Random Seed" 0 0 100
+@param float zoomComp "Zoom" 4 0 200 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float t = PHASE * freq;
+    float2 o = float2(snoise1(t + seedV * 7.3), snoise1(t + 51.7 + seedV * 3.1)) * PX(amplitude) * INTENSITY;
+    float r = radians(rotAmt) * snoise1(t * 0.8 + 91.0 + seedV) * INTENSITY;
+    float2 p = ((uv - 0.5) * RES - o) / (1.0 + zoomComp / 100.0);
+    return SRCE(0.5 + rot2(p, -r) / RES, edge);
+}
+@end
+
+@effect Transform
+@id gese.motion.transform
+@category Motion
+@desc Position, scale, skew, rotation and opacity inside the effect stack. Intensity blends from no change.
+@mix manual
+@param point anchorPt "Anchor Point" 0.5 0.5
+@param point positionPt "Position" 0.5 0.5
+@param float scaleW "Scale Width" 100 -1000 1000 %
+@param float scaleH "Scale Height" 100 -1000 1000 %
+@param float skewV "Skew" 0 -85 85 °
+@param angle skewAxis "Skew Axis" 0
+@param angle rotationA "Rotation" 0
+@param float opacityV "Opacity" 100 0 100 %
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float k = saturate(INTENSITY);
+    float2 anc = lerp(float2(0.5, 0.5), anchorPt, k) * RES;
+    float2 pos = lerp(float2(0.5, 0.5), positionPt, k) * RES;
+    float2 sc = lerp(float2(1, 1), float2(scaleW, scaleH) / 100.0, k);
+    float2 d = uv * RES - pos;
+    d = rot2(d, -radians(rotationA) * k);
+    float sa = radians(skewAxis);
+    d = rot2(d, -sa);
+    d.x -= d.y * tan(radians(skewV) * k);
+    d = rot2(d, sa);
+    d /= (abs(sc) < 1e-4 ? 1e-4 : sc);
+    float4 c = SRCE((d + anc) / RES, edge);
+    c.a *= lerp(1.0, opacityV / 100.0, k);
+    return c;
+}
+@end
+
+@effect Zoom Pulse
+@id gese.motion.zoompulse
+@category Motion
+@desc Beat-style zoom punch that repeats every beat. Set Beats per Minute to the music.
+@mix manual
+@speed
+@param float bpm "Beats per Minute" 120 10 400
+@param float zoomAmt "Zoom" 15 -90 300 %
+@param float sharp "Punch Sharpness" 6 0.5 30
+@param point center "Center" 0.5 0.5
+@param float mblur "Zoom Blur" 30 0 100 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float scaleAt(float ph) { float f = frac(ph * bpm / 60.0); return 1.0 + zoomAmt / 100.0 * exp(-f * sharp) * INTENSITY; }
+float4 effect(float2 uv) {
+    float s = scaleAt(PHASE);
+    int n = mblur > 0.5 ? 12 : 1;
+    float4 acc = 0;
+    [loop] for (int i = 0; i < n; i++) {
+        float si = s * (1.0 - (s - 1.0) * mblur / 100.0 * 0.15 * (n > 1 ? i / (float)(n - 1) : 0.0));
+        acc += SRCEP(center + (uv - center) / si, edge);
+    }
+    return unpremul(acc / n);
+}
+@end
+
+@effect Spin
+@id gese.motion.spin
+@category Motion
+@desc Continuous rotation around a center point.
+@mix manual
+@speed
+@param float rpm "Turns per Second" 0.25 -10 10
+@param point center "Center" 0.5 0.5
+@param float zoomComp "Zoom" 0 0 300 %
+@param float mblur "Motion Blur" 0 0 100 %
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    int n = mblur > 0.5 ? 16 : 1;
+    float shutter = mblur / 100.0 * max(SPEED, 0.01) / max(FPS, 1.0);
+    float4 acc = 0;
+    [loop] for (int i = 0; i < n; i++) {
+        float ph = PHASE - shutter * (n > 1 ? i / (float)(n - 1) : 0.0);
+        float a = ph * rpm * TAU * INTENSITY;
+        float2 p = (uv - center) * RES / (1.0 + zoomComp / 100.0);
+        acc += SRCEP(center + rot2(p, -a) / RES, edge);
+    }
+    return unpremul(acc / n);
+}
+@end
+
+@effect Bounce
+@id gese.motion.bounce
+@category Motion
+@desc Bouncing ball motion with squash on landing.
+@mix manual
+@speed
+@param float height "Bounce Height" 120 0 3000 px
+@param float freq "Bounces per Second" 1.5 0.05 20
+@param float squash "Squash" 15 0 80 %
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float f = frac(PHASE * freq);
+    float y = 4.0 * f * (1.0 - f);
+    float hgt = y * PX(height) * INTENSITY;
+    float sq = pow(saturate(1.0 - y * 4.0), 2.0) * squash / 100.0 * INTENSITY;
+    float2 p = uv * RES;
+    p.y += hgt;
+    float2 base = float2(0.5 * RES.x, RES.y);
+    float2 d = p - base;
+    d /= float2(1.0 + sq, 1.0 - sq);
+    return SRCE((base + d) / RES, edge);
+}
+@end
+
+@effect Slide Loop
+@id gese.motion.slide
+@category Motion
+@desc Endless scrolling in any direction (infinite loop with Normal/Mirror edges).
+@mix manual
+@speed
+@param angle direction "Direction" 0
+@param float pxPerSec "Speed (px/s)" 200 -10000 10000
+@param choice edge "Edge Mode" 1 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float a = radians(direction);
+    float2 o = float2(cos(a), sin(a)) * PX(pxPerSec) * PHASE * INTENSITY;
+    return SRCE(uv - o * TEXEL, edge);
+}
+@end
+
+@effect Flip
+@id gese.motion.flip
+@category Motion
+@desc 3D card flip around the horizontal or vertical axis. Animate Flip Angle.
+@mix manual
+@param choice axis "Axis" 0 "Vertical (Y)|Horizontal (X)"
+@param angle flipAngle "Flip Angle" 180
+@param float persp "Perspective" 40 0 100 %
+@param bool backface "Show Back Face" 1
+@code
+float4 effect(float2 uv) {
+    float a = radians(flipAngle) * INTENSITY;
+    float c = cos(a), s = sin(a);
+    float2 p = uv - 0.5;
+    float u = axis == 0 ? p.x : p.y;
+    float v = axis == 0 ? p.y : p.x;
+    float k = persp / 100.0 * 1.2;
+    float denom = c - u * s * k;
+    if (abs(denom) < 1e-4) return float4(0, 0, 0, 0);
+    float su = u / denom;
+    float w = 1.0 + su * s * k;
+    if (w <= 0.0) return float4(0, 0, 0, 0);
+    float sv = v * w;
+    if (c < 0 && !backface) return float4(0, 0, 0, 0);
+    float2 q = axis == 0 ? float2(su, sv) : float2(sv, su);
+    return SRC(q + 0.5);
+}
+@end
+
+@effect Velocity Zoom
+@id gese.motion.velocityzoom
+@category Motion
+@desc Punch-in zoom with a radial speed blur - the classic velocity edit move. Keyframe Intensity.
+@mix manual
+@param float zoomAmt "Zoom" 40 0 500 %
+@param float blurAmt "Blur" 60 0 100 %
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float z = 1.0 + zoomAmt / 100.0 * INTENSITY;
+    float b = blurAmt / 100.0 * 0.25 * INTENSITY;
+    float4 acc = 0;
+    const int N = 24;
+    [loop] for (int i = 0; i < N; i++) {
+        float s = z * (1.0 + b * (i / (float)(N - 1)));
+        acc += SRCEP(center + (uv - center) / s, edge);
+    }
+    return unpremul(acc / N);
+}
+@end
+
+@effect Twitch
+@id gese.motion.twitch
+@category Motion
+@desc Random short jerks of position, scale, rotation and color at intervals.
+@mix manual
+@speed
+@param float freq "Twitches per Second" 3 0.1 30
+@param float chance "Probability" 50 0 100 %
+@param float amtPos "Position" 40 0 500 px
+@param float amtScale "Scale" 8 0 100 %
+@param float amtRot "Rotation" 3 0 45 °
+@param float amtColor "Color Shift" 6 0 50 px
+@param float seedV "Random Seed" 0 0 100
+@param choice edge "Edge Mode" 2 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float ev = floor(PHASE * freq);
+    float f = frac(PHASE * freq);
+    float on = step(f, 0.3) * step(hash11(ev * 1.31 + seedV), chance / 100.0) * INTENSITY;
+    float2 r2 = hash22(float2(ev, seedV + 7.0)) * 2.0 - 1.0;
+    float rr = hash11(ev * 3.7 + seedV) * 2.0 - 1.0;
+    float2 p = (uv - 0.5) * RES - r2 * PX(amtPos) * on;
+    p /= 1.0 + amtScale / 100.0 * on * abs(rr);
+    p = rot2(p, -radians(amtRot) * rr * on);
+    float2 q = 0.5 + p / RES;
+    float2 cs = float2(PX(amtColor) * on * rr, 0) * TEXEL;
+    float4 c = SRCE(q, edge);
+    c.r = SRCE(q + cs, edge).r;
+    c.b = SRCE(q - cs, edge).b;
+    return c;
+}
+@end
+
+@effect Elastic Scale
+@id gese.motion.elastic
+@category Motion
+@desc Springy scale overshoot that repeats every cycle.
+@mix manual
+@speed
+@param float amount "Overshoot" 25 0 200 %
+@param float freq "Cycles per Second" 1 0.05 20
+@param float springs "Springiness" 3 0.5 10
+@param float damping "Damping" 6 0.5 30
+@param point center "Center" 0.5 0.5
+@param choice edge "Edge Mode" 0 "Crop|Normal (Repeat)|Mirror|Stretch Edges"
+@code
+float4 effect(float2 uv) {
+    float f = frac(PHASE * freq);
+    float s = 1.0 + amount / 100.0 * exp(-f * damping) * cos(f * springs * TAU) * INTENSITY;
+    return SRCE(center + (uv - center) / max(s, 0.01), edge);
+}
+@end

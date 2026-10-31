@@ -1,0 +1,55 @@
+{
+    "name":  "Dreamy Glow",
+    "app":  "GeSe v2.4.0",
+    "effects":  [
+                    {
+                        "id":  900100,
+                        "def":  "gese.filter.dreamy",
+                        "name":  "Dreamy",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+
+                                   }
+                    },
+                    {
+                        "id":  900100,
+                        "def":  "gese.lt.bloom",
+                        "name":  "Bloom",
+                        "on":  true,
+                        "open":  true,
+                        "intensity":  {
+                                          "v":  [
+                                                    100
+                                                ]
+                                      },
+                        "speed":  {
+                                      "v":  [
+                                                1
+                                            ]
+                                  },
+                        "params":  {
+                                       "threshold":  {
+                                                         "v":  [
+                                                                   65
+                                                               ]
+                                                     },
+                                       "strength":  {
+                                                        "v":  [
+                                                                  0.8
+                                                              ]
+                                                    }
+                                   }
+                    }
+                ]
+}

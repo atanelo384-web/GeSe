@@ -1,0 +1,15 @@
+// GeSe built-in effects: Time operators (handled by the renderer, no shader)
+
+@effect Posterize Time
+@id gese.time.posterize
+@category Time
+@desc Plays the layer at a lower frame rate (choppy stop-motion look).
+@timeop posterize
+@param float frameRate "Frame Rate" 8 0.5 120 fps
+
+@effect Freeze Frame
+@id gese.time.freeze
+@category Time
+@desc Holds a single moment of the layer (in layer time, seconds).
+@timeop freeze
+@param float holdAt "Hold At" 0 0 36000 sec
